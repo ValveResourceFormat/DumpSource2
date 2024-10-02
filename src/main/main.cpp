@@ -21,14 +21,7 @@
 #include "utils/common.h"
 #include "interfaces.h"
 #include "globalvariables.h"
-#include <vector>
-#include <string>
-#include <modules.h>
-#include <memory>
 #include "appframework.h"
-#include <icvar.h>
-#include <eiface.h>
-#include <schemasystem/schemasystem.h>
 
 #include "dumpers/concommands/concommands.h"
 #include "dumpers/schemas/schemas.h"
@@ -59,5 +52,5 @@ int main(int argc, char** argv)
 	InitializeAppSystems();
 
 	Dumpers::ConCommands::Dump();
-	Dumpers::Schemas::Dump();
+	//Dumpers::Schemas::Dump();
 }
