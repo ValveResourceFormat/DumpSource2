@@ -16,9 +16,5 @@ include_directories(src)
 # Include all vendor libraries, also sets up HL2SDK and Metamod
 add_subdirectory(vendor)
 
-# Compile protobufs
-
-#include(${PROJECT_SOURCE_DIR}/cmake/protobuf.cmake)
-
 # Source
 add_subdirectory(src)

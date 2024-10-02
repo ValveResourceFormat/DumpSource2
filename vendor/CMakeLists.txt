@@ -18,9 +18,6 @@ SET(HL2SDK_INCLUDES
 add_library(HL2SDK STATIC
 	hl2sdk/tier1/convar.cpp
 	hl2sdk/tier1/generichash.cpp
-	hl2sdk/entity2/entitysystem.cpp
-	hl2sdk/entity2/entityidentity.cpp
-	hl2sdk/entity2/entitykeyvalues.cpp
 	hl2sdk/tier1/keyvalues3.cpp
 )
 

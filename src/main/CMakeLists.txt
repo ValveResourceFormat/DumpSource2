@@ -11,8 +11,6 @@ add_executable(DumpSource2 ${SOURCES_LIST} ${HEADERS_LIST})
 target_link_libraries(DumpSource2 PRIVATE
   HL2SDK
   fmt::fmt
-  #Protobufs
-  #nlohmann_json
   ${CMAKE_DL_LIBS}
 )
 
