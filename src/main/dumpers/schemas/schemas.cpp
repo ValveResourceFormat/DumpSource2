@@ -16,24 +16,36 @@
  * You should have received a copy of the GNU General Public License along with
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#pragma once
 
-#include <eiface.h>
+#include "schemas.h"
+#include "interfaces.h"
+#include "schemasystem/schemasystem.h"
 
-class IFileSystem;
-class IVEngineServer2;
-class IGameResourceService;
-class INetworkServerService;
-class CSchemaSystem;
+namespace Dumpers::Schemas
+{
 
-namespace Interfaces {
+void Dump()
+{
+	auto schemaSystem = Interfaces::schemaSystem;
 
-inline IFileSystem* fileSystem = nullptr;
-inline IVEngineServer2* engineServer = nullptr;
-inline IGameResourceService* gameResourceServiceServer = nullptr;
-inline INetworkServerService* networkServerService = nullptr;
-inline CSchemaSystem* schemaSystem = nullptr;
-inline IServerGameDLL* server = nullptr;
-inline ICvar* cvar = nullptr;
+	const auto& typeScopes = schemaSystem->m_TypeScopes;
 
-} // namespace Interfaces
+	for (auto i = 0; i < typeScopes.GetNumStrings(); ++i)
+	{
+		const auto& typeScope = typeScopes[i];
+		printf("Type scope: %s\n", typeScope->m_szScopeName);
+
+		const auto& classes = typeScope->m_ClassBindings;
+
+		UtlTSHashHandle_t* handles = new UtlTSHashHandle_t[classes.Count()];
+		classes.GetElements(0, classes.Count(), handles);
+
+		for (int j = 0; j < classes.Count(); ++j) {
+			auto class_info = classes[handles[j]];
+
+			printf("\t - %s\n", class_info->m_pszName);
+		}
+	}
+}
+
+} // namespace Dumpers::Schemas

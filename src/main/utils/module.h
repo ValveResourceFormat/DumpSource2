@@ -88,8 +88,11 @@ public:
 		m_hModule = dlmount(szModule.c_str());
 
 		if (!m_hModule)
+		{
 			ExitError("Failed to load %s\n", szModule.c_str());
-			
+			return;
+		}
+
 #ifdef _WIN32
 		MODULEINFO m_hModuleInfo;
 		GetModuleInformation(GetCurrentProcess(), m_hModule, &m_hModuleInfo, sizeof(m_hModuleInfo));
@@ -106,7 +109,7 @@ public:
 			ConMsg("Section %s base: 0x%p | size: %d\n", section.m_szName.c_str(), section.m_pBase, section.m_iSize);
 			*/
 
-		printf("Initialized module %s base: 0x%p | size: %ld\n", m_pszModule, m_base, m_size);
+		printf("Initialized module %s base: 0x%p | size: %zu\n", m_pszModule, m_base, m_size);
 	}
 
 	void *FindSignature(const byte *pData, size_t iSigLength, int &error)
@@ -191,7 +194,7 @@ public:
 	const char *m_pszModule;
 	const char* m_pszPath;
 	HINSTANCE m_hModule;
-	void* m_base;
-	size_t m_size;
+	void* m_base = 0;
+	size_t m_size = 0;
 	std::vector<Section> m_sections;
 };

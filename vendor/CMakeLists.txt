@@ -43,9 +43,14 @@ endif()
 # EXTERNAL LIBRARIES
 # ---
 
-#add_subdirectory(json)
+add_subdirectory(fmt)
 
 set_target_properties(
 	HL2SDK
 	PROPERTIES FOLDER SDK
+)
+
+set_target_properties(
+	fmt
+	PROPERTIES FOLDER Libraries
 )

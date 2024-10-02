@@ -2,3 +2,6 @@
 	path = vendor/hl2sdk
 	url = https://github.com/alliedmodders/hl2sdk
 	shallow = true
+[submodule "vendor/fmt"]
+	path = vendor/fmt
+	url = https://github.com/fmtlib/fmt

@@ -16,24 +16,33 @@
  * You should have received a copy of the GNU General Public License along with
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#pragma once
 
-#include <eiface.h>
+#include "concommands.h"
+#include "interfaces.h"
+#include "icvar.h"
 
-class IFileSystem;
-class IVEngineServer2;
-class IGameResourceService;
-class INetworkServerService;
-class CSchemaSystem;
+namespace Dumpers::ConCommands
+{
 
-namespace Interfaces {
+void Dump()
+{
 
-inline IFileSystem* fileSystem = nullptr;
-inline IVEngineServer2* engineServer = nullptr;
-inline IGameResourceService* gameResourceServiceServer = nullptr;
-inline INetworkServerService* networkServerService = nullptr;
-inline CSchemaSystem* schemaSystem = nullptr;
-inline IServerGameDLL* server = nullptr;
-inline ICvar* cvar = nullptr;
+	ConVarHandle hCvarHandle;
+	hCvarHandle.Set(0);
+	ConVar* pCvar = nullptr;
 
-} // namespace Interfaces
+	do
+	{
+		pCvar = Interfaces::cvar->GetConVar(hCvarHandle);
+
+		hCvarHandle.Set(hCvarHandle.Get() + 1);
+
+		if (!pCvar)
+			continue;
+
+		printf("name: %s\n", pCvar->m_pszName);
+
+	} while (pCvar);
+}
+
+} // namespace Dumpers::ConCommands

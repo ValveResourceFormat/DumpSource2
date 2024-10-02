@@ -16,24 +16,48 @@
  * You should have received a copy of the GNU General Public License along with
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#pragma once
 
+#include "main.h"
+#include "utils/common.h"
+#include "interfaces.h"
+#include "globalvariables.h"
+#include <vector>
+#include <string>
+#include <modules.h>
+#include <memory>
+#include "appframework.h"
+#include <icvar.h>
 #include <eiface.h>
+#include <schemasystem/schemasystem.h>
 
-class IFileSystem;
-class IVEngineServer2;
-class IGameResourceService;
-class INetworkServerService;
-class CSchemaSystem;
+#include "dumpers/concommands/concommands.h"
+#include "dumpers/schemas/schemas.h"
 
-namespace Interfaces {
+void Usage()
+{
+	printf("Usage: DumpSource2 <mod name> <output path>\n");
+}
 
-inline IFileSystem* fileSystem = nullptr;
-inline IVEngineServer2* engineServer = nullptr;
-inline IGameResourceService* gameResourceServiceServer = nullptr;
-inline INetworkServerService* networkServerService = nullptr;
-inline CSchemaSystem* schemaSystem = nullptr;
-inline IServerGameDLL* server = nullptr;
-inline ICvar* cvar = nullptr;
+int main(int argc, char** argv)
+{
+	if (argc <= 2)
+	{
+		Usage();
+		return 0;
+	}
 
-} // namespace Interfaces
+	Globals::modName = argv[1];
+	Globals::outputPath = argv[2];
+
+	if (!std::filesystem::is_directory(Globals::outputPath))
+	{
+		printf("Output path is not a valid folder\n");
+		return 0;
+	}
+
+	InitializeCoreModules();
+	InitializeAppSystems();
+
+	Dumpers::ConCommands::Dump();
+	Dumpers::Schemas::Dump();
+}

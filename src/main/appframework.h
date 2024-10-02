@@ -18,22 +18,5 @@
  */
 #pragma once
 
-#include <eiface.h>
-
-class IFileSystem;
-class IVEngineServer2;
-class IGameResourceService;
-class INetworkServerService;
-class CSchemaSystem;
-
-namespace Interfaces {
-
-inline IFileSystem* fileSystem = nullptr;
-inline IVEngineServer2* engineServer = nullptr;
-inline IGameResourceService* gameResourceServiceServer = nullptr;
-inline INetworkServerService* networkServerService = nullptr;
-inline CSchemaSystem* schemaSystem = nullptr;
-inline IServerGameDLL* server = nullptr;
-inline ICvar* cvar = nullptr;
-
-} // namespace Interfaces
+void InitializeCoreModules();
+void InitializeAppSystems();

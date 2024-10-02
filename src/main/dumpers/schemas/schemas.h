@@ -18,22 +18,9 @@
  */
 #pragma once
 
-#include <eiface.h>
+namespace Dumpers::Schemas
+{
 
-class IFileSystem;
-class IVEngineServer2;
-class IGameResourceService;
-class INetworkServerService;
-class CSchemaSystem;
+void Dump();
 
-namespace Interfaces {
-
-inline IFileSystem* fileSystem = nullptr;
-inline IVEngineServer2* engineServer = nullptr;
-inline IGameResourceService* gameResourceServiceServer = nullptr;
-inline INetworkServerService* networkServerService = nullptr;
-inline CSchemaSystem* schemaSystem = nullptr;
-inline IServerGameDLL* server = nullptr;
-inline ICvar* cvar = nullptr;
-
-} // namespace Interfaces
+} // namespace Dumpers::Schemas
