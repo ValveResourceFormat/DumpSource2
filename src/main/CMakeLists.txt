@@ -6,9 +6,9 @@ file(GLOB_RECURSE HEADERS_LIST
   "*.h"
 )
 
-add_executable(CS2Dumper ${SOURCES_LIST} ${HEADERS_LIST})
+add_executable(DumpSource2 ${SOURCES_LIST} ${HEADERS_LIST})
 
-target_link_libraries(CS2Dumper PRIVATE
+target_link_libraries(DumpSource2 PRIVATE
   HL2SDK
   fmt::fmt
   #Protobufs
