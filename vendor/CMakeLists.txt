@@ -43,7 +43,7 @@ endif()
 # EXTERNAL LIBRARIES
 # ---
 
-add_subdirectory(json)
+#add_subdirectory(json)
 
 set_target_properties(
 	HL2SDK

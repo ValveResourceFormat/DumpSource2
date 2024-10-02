@@ -10,8 +10,8 @@ add_executable(CS2Dumper ${SOURCES_LIST} ${HEADERS_LIST})
 
 target_link_libraries(CS2Dumper PRIVATE
   HL2SDK
-  Protobufs
-  nlohmann_json
+  #Protobufs
+  #nlohmann_json
   ${CMAKE_DL_LIBS}
 )
 
