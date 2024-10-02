@@ -30,7 +30,7 @@ void* AppSystemFactory(const char* pName, int* pReturnCode)
 	if (!strcmp(pName, CVAR_INTERFACE_VERSION))
 		return Interfaces::cvar;
 
-	if (!strcmp(pName, "SchemaSystem_001"))
+	if (!strcmp(pName, SCHEMASYSTEM_INTERFACE_VERSION))
 		return Interfaces::schemaSystem;
 
 	return nullptr;
