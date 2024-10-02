@@ -2,3 +2,4 @@
 	path = vendor/hl2sdk
 	url = https://github.com/alliedmodders/hl2sdk
 	branch = cs2
+	shallow = true
