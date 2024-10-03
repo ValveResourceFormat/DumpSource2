@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Install dependencies
       run: |
@@ -17,10 +17,10 @@ jobs:
         sudo apt-get install -y cmake build-essential
 
     - name: Create build directory
-      run: mkdir build && cd build
+      run: mkdir build
 
     - name: Configure CMake
-      run: cmake ..
+      run: cmake -B build -S .
 
     - name: Build
-      run: cmake --build . --parallel 4
+      run: cmake --build build --parallel 4
