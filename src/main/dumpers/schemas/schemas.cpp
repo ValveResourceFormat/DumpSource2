@@ -18,32 +18,99 @@
  */
 
 #include "schemas.h"
+#include "globalvariables.h"
 #include "interfaces.h"
 #include "schemasystem/schemasystem.h"
+#include <filesystem>
+#include <fstream>
+#include <map>
+#include <unordered_set>
 
 namespace Dumpers::Schemas
 {
+
+void DumpTypeScope(CSchemaSystemTypeScope* typeScope, std::filesystem::path schemaPath, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
+{
+	const auto& classes = typeScope->m_ClassBindings;
+
+	UtlTSHashHandle_t* handles = new UtlTSHashHandle_t[classes.Count()];
+	classes.GetElements(0, classes.Count(), handles);
+
+	for (int j = 0; j < classes.Count(); ++j) {
+		const auto classInfo = classes[handles[j]];
+
+		if (!std::filesystem::is_directory(schemaPath / classInfo->m_pszProjectName))
+			if (!std::filesystem::create_directory(schemaPath / classInfo->m_pszProjectName))
+				return;
+
+		// Some classes have :: in them which we can't save.
+		auto sanitizedFileName = std::string(classInfo->m_pszName);
+		std::replace(sanitizedFileName.begin(), sanitizedFileName.end(), ':', '_');
+
+		// We save the file in a map so that we know which files are outdated and should be removed
+		foundFiles[classInfo->m_pszProjectName].insert(sanitizedFileName);
+
+		std::ofstream output((schemaPath / classInfo->m_pszProjectName / sanitizedFileName).replace_extension(".h"));
+
+		output << "class " << classInfo->m_pszName;
+
+		if (classInfo->m_nBaseClassCount > 0)
+			output << " : public " << classInfo->m_pBaseClasses[0].m_pClass->m_pszName;
+
+		output << "\n{\n";
+
+		for (uint16_t k = 0; k < classInfo->m_nFieldCount; k++)
+		{
+			const auto& field = classInfo->m_pFields[k];
+
+			output << "\t" << field.m_pType->m_sTypeName.String() << " " << field.m_pszName << ";\n";
+		}
+
+		output << "}\n";
+	}
+}
 
 void Dump()
 {
 	auto schemaSystem = Interfaces::schemaSystem;
 
 	const auto& typeScopes = schemaSystem->m_TypeScopes;
+	const auto schemaPath = Globals::outputPath / "schemas";
+
+	if (!std::filesystem::is_directory(schemaPath))
+		if (!std::filesystem::create_directory(schemaPath))
+			return;
+
+	std::map<std::string, std::unordered_set<std::string>> foundFiles;
 
 	for (auto i = 0; i < typeScopes.GetNumStrings(); ++i)
+		DumpTypeScope(typeScopes[i], schemaPath, foundFiles);
+
+	DumpTypeScope(schemaSystem->GlobalTypeScope(), schemaPath, foundFiles);
+
+	for (const auto& entry : std::filesystem::directory_iterator(schemaPath))
 	{
-		const auto& typeScope = typeScopes[i];
-		printf("Type scope: %s\n", typeScope->m_szScopeName);
+		auto projectName = entry.path().filename().string();
+		bool isInMap = foundFiles.find(projectName) != foundFiles.end();
 
-		const auto& classes = typeScope->m_ClassBindings;
+		if (entry.is_directory() && !isInMap)
+		{
+			printf("Removing %ls\n", entry.path().c_str());
+			std::filesystem::remove_all(entry.path());
+		}
+		else if (isInMap)
+		{
 
-		UtlTSHashHandle_t* handles = new UtlTSHashHandle_t[classes.Count()];
-		classes.GetElements(0, classes.Count(), handles);
+			for (const auto& typeScopePath : std::filesystem::directory_iterator(entry.path()))
+			{
+				auto& filesSet = foundFiles[projectName];
 
-		for (int j = 0; j < classes.Count(); ++j) {
-			auto class_info = classes[handles[j]];
-
-			printf("\t - %s\n", class_info->m_pszName);
+				if (filesSet.find(typeScopePath.path().stem().string()) == filesSet.end())
+				{
+					printf("Removing %ls\n", typeScopePath.path().c_str());
+					std::filesystem::remove(typeScopePath.path());
+				}
+			}
 		}
 	}
 }

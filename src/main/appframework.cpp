@@ -21,9 +21,36 @@
 #include "utils/module.h"
 #include "modules.h"
 #include "interfaces.h"
+#include "application.h"
 #include "globalvariables.h"
 #include <schemasystem/schemasystem.h>
 #include <fmt/format.h>
+#include <map>
+
+static DumperApplication g_Application;
+
+struct AppSystemInfo
+{
+	bool gameBin;
+	const char* moduleName;
+	std::string interfaceVersion;
+	bool connect = true;
+};
+
+std::vector<AppSystemInfo> g_appSystems{
+	{false, "filesystem_stdio", FILESYSTEM_INTERFACE_VERSION},
+	{false, "resourcesystem", RESOURCESYSTEM_INTERFACE_VERSION, true},
+	{true, "client", "Source2ClientConfig001"},
+	{false, "engine2", SOURCE2ENGINETOSERVER_INTERFACE_VERSION},
+	{true, "host", "Source2Host001" },
+	{true, "matchmaking", "MATCHFRAMEWORK_001"},
+	{true, "server", "Source2ServerConfig001"},
+	{false, "animationsystem", "AnimationSystem_001"},
+	{false, "materialsystem2", "TextLayout_001"},
+	{false, "meshsystem", "MeshSystem001", false},
+};
+
+std::map<std::string, IAppSystem*> g_factoryMap;
 
 void* AppSystemFactory(const char* pName, int* pReturnCode)
 {
@@ -32,6 +59,15 @@ void* AppSystemFactory(const char* pName, int* pReturnCode)
 
 	if (!strcmp(pName, SCHEMASYSTEM_INTERFACE_VERSION))
 		return Interfaces::schemaSystem;
+	
+	if (!strcmp(pName, APPLICATION_INTERFACE_VERSION))
+		return &g_Application;
+
+	if (g_factoryMap.find(pName) != g_factoryMap.end())
+	{
+		printf("Connected %s\n", pName);
+		return g_factoryMap.at(pName);
+	}
 
 	return nullptr;
 }
@@ -54,17 +90,6 @@ void InitializeCoreModules()
 	Interfaces::schemaSystem->Init();
 }
 
-struct AppSystemInfo
-{
-	bool gameBin;
-	const char* moduleName;
-	const char* interfaceVersion;
-};
-
-std::vector<AppSystemInfo> g_appSystems{
-	{true, "client", "Source2ClientConfig001"}
-};
-
 void InitializeAppSystems()
 {
 	for (const auto& appSystem : g_appSystems)
@@ -73,9 +98,23 @@ void InitializeAppSystems()
 
 		CModule module(path.c_str(), appSystem.moduleName);
 
-		auto interface = module.FindInterface<IAppSystem*>(appSystem.interfaceVersion);
+		auto interface = module.FindInterface<IAppSystem*>(appSystem.interfaceVersion.c_str());
 
-		interface->Connect(&AppSystemFactory);
-		interface->Init();
+		g_factoryMap[appSystem.interfaceVersion] = interface;
+
+		if (appSystem.connect)
+		{
+
+			interface->Connect(&AppSystemFactory);
+			interface->Init();
+		}
+		else
+		{
+			// We can't connect this interface, let's at least dump schemas
+			typedef void* (*InstallSchemaBindings)(const char* interfaceName, void* pSchemaSystem);
+			InstallSchemaBindings fn = (InstallSchemaBindings)dlsym(module.m_hModule, "InstallSchemaBindings");
+
+			fn(SCHEMASYSTEM_INTERFACE_VERSION, Interfaces::schemaSystem);
+		}
 	}
 }

@@ -51,6 +51,8 @@ int main(int argc, char** argv)
 	InitializeCoreModules();
 	InitializeAppSystems();
 
+	printf("Dumping\n");
+
 	Dumpers::ConCommands::Dump();
-	//Dumpers::Schemas::Dump();
+	Dumpers::Schemas::Dump();
 }
