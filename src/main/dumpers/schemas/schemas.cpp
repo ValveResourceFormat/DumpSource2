@@ -30,7 +30,7 @@
 namespace Dumpers::Schemas
 {
 
-void DumpTypeScope(CSchemaSystemTypeScope* typeScope, std::filesystem::path schemaPath, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
+void DumpClasses(CSchemaSystemTypeScope* typeScope, std::filesystem::path schemaPath, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
 {
 	const auto& classes = typeScope->m_ClassBindings;
 
@@ -67,8 +67,71 @@ void DumpTypeScope(CSchemaSystemTypeScope* typeScope, std::filesystem::path sche
 			output << "\t" << field.m_pType->m_sTypeName.String() << " " << field.m_pszName << ";\n";
 		}
 
-		output << "}\n";
+		output << "};\n";
 	}
+}
+
+void DumpEnums(CSchemaSystemTypeScope* typeScope, std::filesystem::path schemaPath, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
+{
+	const auto& enums = typeScope->m_EnumBindings;
+
+	UtlTSHashHandle_t* handles = new UtlTSHashHandle_t[enums.Count()];
+	enums.GetElements(0, enums.Count(), handles);
+
+	for (int j = 0; j < enums.Count(); ++j) {
+		const auto enumInfo = enums[handles[j]];
+
+		if (!std::filesystem::is_directory(schemaPath / enumInfo->m_pszProjectName))
+			if (!std::filesystem::create_directory(schemaPath / enumInfo->m_pszProjectName))
+				return;
+
+		// Some classes have :: in them which we can't save.
+		auto sanitizedFileName = std::string(enumInfo->m_pszName);
+		std::replace(sanitizedFileName.begin(), sanitizedFileName.end(), ':', '_');
+
+		// We save the file in a map so that we know which files are outdated and should be removed
+		foundFiles[enumInfo->m_pszProjectName].insert(sanitizedFileName);
+
+		std::ofstream output((schemaPath / enumInfo->m_pszProjectName / sanitizedFileName).replace_extension(".h"));
+
+		output << "enum " << enumInfo->m_pszName << " : ";
+
+		switch (enumInfo->m_nAlignment)
+		{
+		case 1:
+			output << "uint8_t";
+			break;
+		case 2:
+			output << "uint16_t";
+			break;
+		case 4:
+			output << "uint32_t";
+			break;
+		case 8:
+			output << "uint64_t";
+			break;
+		default:
+			output << "unknown alignment type";
+		}
+
+		output << "\n{\n";
+
+		for (uint16_t k = 0; k < enumInfo->m_nEnumeratorCount; k++)
+		{
+			const auto& field = enumInfo->m_pEnumerators[k];
+
+			output << "\t" << field.m_pszName << " = " << field.m_nValue << ",\n";
+		}
+
+		output << "};\n";
+	}
+}
+
+
+void DumpTypeScope(CSchemaSystemTypeScope* typeScope, std::filesystem::path schemaPath, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
+{
+	DumpClasses(typeScope, schemaPath, foundFiles);
+	DumpEnums(typeScope, schemaPath, foundFiles);
 }
 
 void Dump()
