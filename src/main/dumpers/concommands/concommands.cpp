@@ -21,6 +21,7 @@
 #include "interfaces.h"
 #include "globalvariables.h"
 #include <icvar.h>
+#include <algorithm>
 #include <fstream>
 #include <vector>
 
