@@ -46,11 +46,27 @@ std::vector<AppSystemInfo> g_appSystems{
 	{true, "client", "Source2ClientConfig001"},
 	{false, "engine2", SOURCE2ENGINETOSERVER_INTERFACE_VERSION},
 	{true, "host", "GameSystem2HostHook" },
-	{true, "matchmaking", "MATCHFRAMEWORK_001", true, CS2_ONLY},
-	{true, "server", "Source2ServerConfig001"},
-	{false, "animationsystem", "AnimationSystem_001"},
-	{false, "materialsystem2", "TextLayout_001"},
-	{false, "meshsystem", "MeshSystem001", false},
+	{true, "matchmaking", MATCHFRAMEWORK_INTERFACE_VERSION, true, CS2_ONLY},
+	{true, "server", SOURCE2SERVERCONFIG_INTERFACE_VERSION},
+	{false, "animationsystem", ANIMATIONSYSTEM_INTERFACE_VERSION},
+	{false, "materialsystem2", TEXTLAYOUT_INTERFACE_VERSION},
+	{false, "meshsystem", MESHSYSTEM_INTERFACE_VERSION, false},
+	{false, "networksystem", NETWORKSYSTEM_INTERFACE_VERSION, false}, // can't connect on linux cuz of missing gameinfo	in IApplication
+	{false, "panorama", PANORAMAUIENGINE_INTERFACE_VERSION},
+	{false, "particles", PARTICLESYSTEMMGR_INTERFACE_VERSION, false}, // needs renderdevice interface
+	{false, "pulse_system", PULSESYSTEM_INTERFACE_VERSION},
+#ifdef _WIN32
+	{false, "rendersystemdx11", RENDER_UTILS_INTERFACE_VERSION},
+#else
+	{false, "rendersystemvulkan", RENDER_UTILS_INTERFACE_VERSION},
+#endif
+	{ false, "scenefilecache", "SceneFileCache002" },
+	{ false, "scenesystem", SCENEUTILS_INTERFACE_VERSION },
+	{ false, "soundsystem", SOUNDOPSYSTEMEDIT_INTERFACE_VERSION },
+	{ false, "vphysics2", VPHYSICS2HANDLE_INTERFACE_VERSION },
+	{ false, "worldrenderer", WORLD_RENDERER_MGR_INTERFACE_VERSION },
+	{ false, "assetsystem", ASSETSYSTEM_INTERFACE_VERSION, false },
+	{ false, "assetpreview", ASSETPREVIEWSYSTEM_INTERFACE_VERSION, false },
 };
 
 std::map<std::string, IAppSystem*> g_factoryMap;
@@ -75,6 +91,16 @@ void* AppSystemFactory(const char* pName, int* pReturnCode)
 	return nullptr;
 }
 
+// SceneUtils_001 tries to set convars on init
+// which then calls convar change handlers that try to load main scenesystem appsystem
+void SetConvarValueStub(ICvar* icvar, ConVarHandle handle)
+{
+	auto pCvar = icvar->GetConVar(handle);
+
+	if (!strcmp("r_dopixelvisibility", pCvar->m_pszName))
+		((*(CVValue_t*)&pCvar->values).m_bValue) = false;
+}
+
 void InitializeCoreModules()
 {
 	// Load modules (dlopen)
@@ -91,6 +117,17 @@ void InitializeCoreModules()
 
 	Interfaces::schemaSystem->Connect(&AppSystemFactory);
 	Interfaces::schemaSystem->Init();
+
+	auto vtb = *((void***)Interfaces::cvar);
+
+#ifdef _WIN32
+	DWORD _;
+	VirtualProtect(vtb + 14, 8, PAGE_EXECUTE_READWRITE, &_);
+	*(vtb + 14) = &SetConvarValueStub;
+#else
+	void* patchBytes = (void*)&SetConvarValueStub;
+	Plat_WriteMemory(vtb + 14, (uint8_t*)&patchBytes, 8);
+#endif
 }
 
 void InitializeAppSystems()
@@ -110,7 +147,6 @@ void InitializeAppSystems()
 
 		if (appSystem.connect)
 		{
-
 			interface->Connect(&AppSystemFactory);
 			interface->Init();
 		}
