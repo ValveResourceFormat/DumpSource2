@@ -41,24 +41,24 @@ struct AppSystemInfo
 };
 
 std::vector<AppSystemInfo> g_appSystems{
-	{false, "filesystem_stdio", FILESYSTEM_INTERFACE_VERSION},
-	{false, "resourcesystem", RESOURCESYSTEM_INTERFACE_VERSION},
-	{true, "client", "Source2ClientConfig001"},
-	{false, "engine2", SOURCE2ENGINETOSERVER_INTERFACE_VERSION},
-	{true, "host", "GameSystem2HostHook" },
-	{true, "matchmaking", MATCHFRAMEWORK_INTERFACE_VERSION, true, CS2_ONLY},
-	{true, "server", SOURCE2SERVERCONFIG_INTERFACE_VERSION},
-	{false, "animationsystem", ANIMATIONSYSTEM_INTERFACE_VERSION},
-	{false, "materialsystem2", TEXTLAYOUT_INTERFACE_VERSION},
-	{false, "meshsystem", MESHSYSTEM_INTERFACE_VERSION, false},
-	{false, "networksystem", NETWORKSYSTEM_INTERFACE_VERSION, false}, // can't connect on linux cuz of missing gameinfo	in IApplication
-	{false, "panorama", PANORAMAUIENGINE_INTERFACE_VERSION},
-	{false, "particles", PARTICLESYSTEMMGR_INTERFACE_VERSION, false}, // needs renderdevice interface
-	{false, "pulse_system", PULSESYSTEM_INTERFACE_VERSION},
+	{ false, "filesystem_stdio", FILESYSTEM_INTERFACE_VERSION },
+	{ false, "resourcesystem", RESOURCESYSTEM_INTERFACE_VERSION },
+	{ true, "client", "Source2ClientConfig001" },
+	{ false, "engine2", SOURCE2ENGINETOSERVER_INTERFACE_VERSION },
+	{ true, "host", "GameSystem2HostHook" },
+	{ true, "matchmaking", MATCHFRAMEWORK_INTERFACE_VERSION, true, CS2_ONLY },
+	{ true, "server", SOURCE2SERVERCONFIG_INTERFACE_VERSION },
+	{ false, "animationsystem", ANIMATIONSYSTEM_INTERFACE_VERSION },
+	{ false, "materialsystem2", TEXTLAYOUT_INTERFACE_VERSION },
+	{ false, "meshsystem", MESHSYSTEM_INTERFACE_VERSION, false },
+	{ false, "networksystem", NETWORKSYSTEM_INTERFACE_VERSION, false}, // can't connect on linux cuz of missing gameinfo	in IApplication
+	{ false, "panorama", PANORAMAUIENGINE_INTERFACE_VERSION },
+	{ false, "particles", PARTICLESYSTEMMGR_INTERFACE_VERSION, false }, // needs renderdevice interface
+	{ false, "pulse_system", PULSESYSTEM_INTERFACE_VERSION },
 #ifdef _WIN32
-	{false, "rendersystemdx11", RENDER_UTILS_INTERFACE_VERSION},
+	{ false, "rendersystemdx11", RENDER_UTILS_INTERFACE_VERSION },
 #else
-	{false, "rendersystemvulkan", RENDER_UTILS_INTERFACE_VERSION},
+	{ false, "rendersystemvulkan", RENDER_UTILS_INTERFACE_VERSION },
 #endif
 	{ false, "scenefilecache", "SceneFileCache002" },
 	{ false, "scenesystem", SCENEUTILS_INTERFACE_VERSION },
@@ -78,7 +78,7 @@ void* AppSystemFactory(const char* pName, int* pReturnCode)
 
 	if (!strcmp(pName, SCHEMASYSTEM_INTERFACE_VERSION))
 		return Interfaces::schemaSystem;
-	
+
 	if (!strcmp(pName, APPLICATION_INTERFACE_VERSION))
 		return &g_Application;
 
@@ -97,6 +97,7 @@ void SetConvarValueStub(ICvar* icvar, ConVarHandle handle)
 {
 	auto pCvar = icvar->GetConVar(handle);
 
+	// it also crashes if r_dopixelvisibility is true
 	if (!strcmp("r_dopixelvisibility", pCvar->m_pszName))
 		((*(CVValue_t*)&pCvar->values).m_bValue) = false;
 }

@@ -17,10 +17,17 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+
+// Yes this is shit, no we can't make it better.
+#define _ALLOW_KEYWORD_MACROS 1
+#define private public
+#include <icvar.h>
+#undef private
+#undef _ALLOW_KEYWORD_MACROS
+
 #include "concommands.h"
 #include "interfaces.h"
 #include "globalvariables.h"
-#include <icvar.h>
 #include <algorithm>
 #include <fstream>
 #include <vector>
@@ -49,7 +56,7 @@ namespace Dumpers::ConCommands
 	if (hasMinValue || hasMaxValue)														\
 		stream << ", ";																					\
 																														\
-	WriteFlags(pCvar, stream);																\
+	WriteFlags(pCvar->flags, stream);													\
 																														\
 	stream << ")";
 
@@ -93,12 +100,12 @@ std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{FCVAR_DEFENSIVE, "defensive"}
 };
 
-void WriteFlags(ConVar* pCvar, std::ofstream& stream)
+void WriteFlags(uint64_t flags, std::ofstream& stream)
 {
 	bool found = false;
 	for (const auto& [value, name] : g_flagMap)
 	{
-		if (pCvar->flags & value)
+		if (flags & value)
 		{
 			stream << (found ? " " : "") << name;
 			found = true;
@@ -115,7 +122,7 @@ void WriteValueLine(ConVar* pCvar, std::ofstream& stream)
 	case EConVarType_Bool:
 	{
 		stream << " " << (value.m_bValue ? "true" : "false") << " (";
-		WriteFlags(pCvar, stream);
+		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
@@ -157,42 +164,42 @@ void WriteValueLine(ConVar* pCvar, std::ofstream& stream)
 	case EConVarType_String:
 	{
 		stream << " \"" << (value.m_szValue ? value.m_szValue : "") << "\"" << " (";
-		WriteFlags(pCvar, stream);
+		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
 	case EConVarType_Color:
 	{
 		stream << " \"" << value.m_clrValue.r() << ", " << value.m_clrValue.g() << ", " << value.m_clrValue.b() << ", " << value.m_clrValue.a() << "\"" << " (";
-		WriteFlags(pCvar, stream);
+		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
 	case EConVarType_Vector2:
 	{
 		stream << " \"" << value.m_vec2Value.x << ", " << value.m_vec2Value.y << "\"" << " (";
-		WriteFlags(pCvar, stream);
+		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
 	case EConVarType_Vector3:
 	{
 		stream << " \"" << value.m_vec3Value.x << ", " << value.m_vec3Value.y << ", " << value.m_vec3Value.x << "\"" << " (";
-		WriteFlags(pCvar, stream);
+		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
 	case EConVarType_Vector4:
 	{
 		stream << " \"" << value.m_vec4Value.x << ", " << value.m_vec4Value.y << ", " << value.m_vec4Value.x << ", " << value.m_vec4Value.w << "\"" << " (";
-		WriteFlags(pCvar, stream);
+		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
 	case EConVarType_Qangle:
 	{
 		stream << " \"" << value.m_angValue.x << ", " << value.m_angValue.y << ", " << value.m_angValue.x << "\"" << " (";
-		WriteFlags(pCvar, stream);
+		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
@@ -202,7 +209,7 @@ void WriteValueLine(ConVar* pCvar, std::ofstream& stream)
 	}
 }
 
-void Dump()
+void DumpConVars()
 {
 	ConVarHandle hCvarHandle;
 	hCvarHandle.Set(0);
@@ -238,6 +245,52 @@ void Dump()
 
 		output << "\n" << std::endl;
 	}
+}
+
+void DumpCommands()
+{
+	
+	ConCommandHandle  hConCommandHandle;
+	hConCommandHandle.Set(0);
+	ConCommand* pConCommand = nullptr;
+	ConCommand* pInvalidCommand = Interfaces::cvar->GetCommand(ConCommandHandle());
+
+	std::vector<ConCommand*> commands;
+	// there's always gonna be a lot of commands, let's save some reallocations
+	commands.reserve(1000);
+
+	do
+	{
+		pConCommand = Interfaces::cvar->GetCommand(hConCommandHandle);
+
+		hConCommandHandle.Set(hConCommandHandle.Get() + 1);
+
+		if (!pConCommand)
+			continue;
+
+		commands.push_back(pConCommand);
+	} while (pConCommand && pConCommand != pInvalidCommand);
+
+	std::sort(commands.begin(), commands.end(), [](const ConCommand* a, const ConCommand* b) {
+		return strcmp(a->m_pszName, b->m_pszName) < 0;
+	});
+
+	std::ofstream output(Globals::outputPath / "commands.txt");
+	
+	for (const auto command : commands)
+	{
+		output << command->m_pszName << " (";
+		WriteFlags(command->m_nFlags, output);
+		output << ")\n\t" << (command->m_pszHelpString[0] ? command->m_pszHelpString : "<no description>");
+
+		output << "\n" << std::endl;
+	}
+}
+
+void Dump()
+{
+	DumpConVars();
+	DumpCommands();
 }
 
 } // namespace Dumpers::ConCommands

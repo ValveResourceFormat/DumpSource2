@@ -159,7 +159,7 @@ void Dump()
 
 		if (entry.is_directory() && !isInMap)
 		{
-			printf("Removing %ls\n", entry.path().c_str());
+			printf("Removing %s\n", entry.path().generic_string().c_str());
 			std::filesystem::remove_all(entry.path());
 		}
 		else if (isInMap)
@@ -171,7 +171,7 @@ void Dump()
 
 				if (filesSet.find(typeScopePath.path().stem().string()) == filesSet.end())
 				{
-					printf("Removing %ls\n", typeScopePath.path().c_str());
+					printf("Removing %s\n", typeScopePath.path().generic_string().c_str());
 					std::filesystem::remove(typeScopePath.path());
 				}
 			}
