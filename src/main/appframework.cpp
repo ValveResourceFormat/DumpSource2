@@ -29,21 +29,24 @@
 
 static DumperApplication g_Application;
 
+#define CS2_ONLY (1<<0)
+
 struct AppSystemInfo
 {
 	bool gameBin;
 	const char* moduleName;
 	std::string interfaceVersion;
 	bool connect = true;
+	uint64_t flags = 0;
 };
 
 std::vector<AppSystemInfo> g_appSystems{
 	{false, "filesystem_stdio", FILESYSTEM_INTERFACE_VERSION},
-	{false, "resourcesystem", RESOURCESYSTEM_INTERFACE_VERSION, true},
+	{false, "resourcesystem", RESOURCESYSTEM_INTERFACE_VERSION},
 	{true, "client", "Source2ClientConfig001"},
 	{false, "engine2", SOURCE2ENGINETOSERVER_INTERFACE_VERSION},
-	{true, "host", "Source2Host001" },
-	{true, "matchmaking", "MATCHFRAMEWORK_001"},
+	{true, "host", "GameSystem2HostHook" },
+	{true, "matchmaking", "MATCHFRAMEWORK_001", true, CS2_ONLY},
 	{true, "server", "Source2ServerConfig001"},
 	{false, "animationsystem", "AnimationSystem_001"},
 	{false, "materialsystem2", "TextLayout_001"},
@@ -94,6 +97,9 @@ void InitializeAppSystems()
 {
 	for (const auto& appSystem : g_appSystems)
 	{
+		if ((appSystem.flags & CS2_ONLY) != 0 && Globals::modName != "csgo")
+			continue;
+
 		std::string path = appSystem.gameBin ? fmt::format("../../{}/bin/{}", Globals::modName.c_str(), PLATFORM_FOLDER) : "";
 
 		CModule module(path.c_str(), appSystem.moduleName);
