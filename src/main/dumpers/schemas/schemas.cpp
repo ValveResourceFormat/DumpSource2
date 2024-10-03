@@ -25,6 +25,7 @@
 #include <fstream>
 #include <map>
 #include <unordered_set>
+#include <algorithm>
 
 namespace Dumpers::Schemas
 {
