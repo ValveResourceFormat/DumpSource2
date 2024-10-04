@@ -209,6 +209,24 @@ void WriteValueLine(ConVar* pCvar, std::ofstream& stream)
 	}
 }
 
+void FixNewlineTabbing(std::string& str)
+{
+	auto it = str.begin();
+	while ((it = std::find(it, str.end(), '\n')) != str.end()) {
+		if (it + 1 == str.end() || *(it + 1) != '\t')
+			it = str.insert(it + 1, '\t') + 1;
+		else
+			it++;
+	}
+
+	// trim end of string
+	if (str.back() == '\t')
+		str.pop_back();
+
+	if (str.back() == '\n')
+		str.pop_back();
+}
+
 void DumpConVars()
 {
 	ConVarHandle hCvarHandle;
@@ -239,9 +257,16 @@ void DumpConVars()
 
 	for (const auto cvar : convars)
 	{
+		std::string helpString = "<no description>";
+		if (cvar->m_pszHelpString[0])
+		{
+			helpString = cvar->m_pszHelpString;
+			FixNewlineTabbing(helpString);
+		}
+
 		output << cvar->m_pszName;
 		WriteValueLine(cvar, output);
-		output << "\n\t" << (cvar->m_pszHelpString[0] ? cvar->m_pszHelpString : "<no description>");
+		output << "\n\t" << helpString;
 
 		output << "\n" << std::endl;
 	}
@@ -279,9 +304,16 @@ void DumpCommands()
 	
 	for (const auto command : commands)
 	{
+		std::string helpString = "<no description>";
+		if (command->m_pszHelpString[0])
+		{
+			helpString = command->m_pszHelpString;
+			FixNewlineTabbing(helpString);
+		}
+
 		output << command->m_pszName << " (";
 		WriteFlags(command->m_nFlags, output);
-		output << ")\n\t" << (command->m_pszHelpString[0] ? command->m_pszHelpString : "<no description>");
+		output << ")\n\t" << helpString;
 
 		output << "\n" << std::endl;
 	}
