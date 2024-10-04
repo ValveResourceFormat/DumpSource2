@@ -89,7 +89,11 @@ public:
 
 		if (!m_hModule)
 		{
+#ifdef _WIN32
 			ExitError("Failed to load %s\n", szModule.c_str());
+#else
+			ExitError("Failed to load %s\n%s\n", szModule.c_str(), dlerror());
+#endif
 			return;
 		}
 

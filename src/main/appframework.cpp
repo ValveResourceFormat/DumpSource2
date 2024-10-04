@@ -65,8 +65,6 @@ std::vector<AppSystemInfo> g_appSystems{
 	{ false, "soundsystem", SOUNDOPSYSTEMEDIT_INTERFACE_VERSION },
 	{ false, "vphysics2", VPHYSICS2HANDLE_INTERFACE_VERSION },
 	{ false, "worldrenderer", WORLD_RENDERER_MGR_INTERFACE_VERSION },
-	{ false, "assetsystem", ASSETSYSTEM_INTERFACE_VERSION, false },
-	{ false, "assetpreview", ASSETPREVIEWSYSTEM_INTERFACE_VERSION, false },
 };
 
 std::map<std::string, IAppSystem*> g_factoryMap;
