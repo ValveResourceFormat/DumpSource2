@@ -170,35 +170,35 @@ void WriteValueLine(ConVar* pCvar, std::ofstream& stream)
 	}
 	case EConVarType_Color:
 	{
-		stream << " \"" << value.m_clrValue.r() << ", " << value.m_clrValue.g() << ", " << value.m_clrValue.b() << ", " << value.m_clrValue.a() << "\"" << " (";
+		stream << " [" << value.m_clrValue.r() << ", " << value.m_clrValue.g() << ", " << value.m_clrValue.b() << ", " << value.m_clrValue.a() << "]" << " (";
 		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
 	case EConVarType_Vector2:
 	{
-		stream << " \"" << value.m_vec2Value.x << ", " << value.m_vec2Value.y << "\"" << " (";
+		stream << " [" << value.m_vec2Value.x << ", " << value.m_vec2Value.y << "]" << " (";
 		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
 	case EConVarType_Vector3:
 	{
-		stream << " \"" << value.m_vec3Value.x << ", " << value.m_vec3Value.y << ", " << value.m_vec3Value.x << "\"" << " (";
+		stream << " [" << value.m_vec3Value.x << ", " << value.m_vec3Value.y << ", " << value.m_vec3Value.x << "]" << " (";
 		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
 	case EConVarType_Vector4:
 	{
-		stream << " \"" << value.m_vec4Value.x << ", " << value.m_vec4Value.y << ", " << value.m_vec4Value.x << ", " << value.m_vec4Value.w << "\"" << " (";
+		stream << " [" << value.m_vec4Value.x << ", " << value.m_vec4Value.y << ", " << value.m_vec4Value.x << ", " << value.m_vec4Value.w << "]" << " (";
 		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
 	}
 	case EConVarType_Qangle:
 	{
-		stream << " \"" << value.m_angValue.x << ", " << value.m_angValue.y << ", " << value.m_angValue.x << "\"" << " (";
+		stream << " [" << value.m_angValue.x << ", " << value.m_angValue.y << ", " << value.m_angValue.x << "]" << " (";
 		WriteFlags(pCvar->flags, stream);
 		stream << ")";
 		break;
