@@ -321,6 +321,11 @@ void DumpCommands()
 
 void Dump()
 {
+	// cl_color has a random default value on each start.
+	if (ConVarHandle cvarHandle = Interfaces::cvar->FindConVar("cl_color"); cvarHandle.IsValid())
+		if (ConVar* cvar = Interfaces::cvar->GetConVar(cvarHandle))
+			cvar->m_cvvDefaultValue->m_i16Value = 0;
+
 	DumpConVars();
 	DumpCommands();
 }
