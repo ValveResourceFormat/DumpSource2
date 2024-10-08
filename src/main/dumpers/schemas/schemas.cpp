@@ -54,6 +54,7 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::filesystem::path schema
 		std::ofstream output((schemaPath / classInfo->m_pszProjectName / sanitizedFileName).replace_extension(".h"));
 
 		output << "class " << classInfo->m_pszName;
+		Globals::stringsIgnoreStream << classInfo->m_pszName << "\n";
 
 		if (classInfo->m_nBaseClassCount > 0)
 			output << " : public " << classInfo->m_pBaseClasses[0].m_pClass->m_pszName;
@@ -65,6 +66,7 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::filesystem::path schema
 			const auto& field = classInfo->m_pFields[k];
 
 			output << "\t" << field.m_pType->m_sTypeName.String() << " " << field.m_pszName << ";\n";
+			Globals::stringsIgnoreStream << field.m_pszName << "\n";
 		}
 
 		output << "};\n";
@@ -95,6 +97,7 @@ void DumpEnums(CSchemaSystemTypeScope* typeScope, std::filesystem::path schemaPa
 		std::ofstream output((schemaPath / enumInfo->m_pszProjectName / sanitizedFileName).replace_extension(".h"));
 
 		output << "enum " << enumInfo->m_pszName << " : ";
+		Globals::stringsIgnoreStream << enumInfo->m_pszName << "\n";
 
 		switch (enumInfo->m_nAlignment)
 		{
@@ -121,6 +124,7 @@ void DumpEnums(CSchemaSystemTypeScope* typeScope, std::filesystem::path schemaPa
 			const auto& field = enumInfo->m_pEnumerators[k];
 
 			output << "\t" << field.m_pszName << " = " << field.m_nValue << ",\n";
+			Globals::stringsIgnoreStream << field.m_pszName << "\n";
 		}
 
 		output << "};\n";

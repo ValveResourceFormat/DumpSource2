@@ -48,6 +48,8 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
+	Globals::stringsIgnoreStream = std::ofstream(Globals::outputPath / ".stringsignore");
+
 	InitializeCoreModules();
 	InitializeAppSystems();
 

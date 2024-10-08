@@ -212,7 +212,8 @@ void WriteValueLine(ConVar* pCvar, std::ofstream& stream)
 void FixNewlineTabbing(std::string& str)
 {
 	auto it = str.begin();
-	while ((it = std::find(it, str.end(), '\n')) != str.end()) {
+	while ((it = std::find(it, str.end(), '\n')) != str.end())
+	{
 		if (it + 1 == str.end() || *(it + 1) != '\t')
 			it = str.insert(it + 1, '\t') + 1;
 		else
@@ -226,6 +227,25 @@ void FixNewlineTabbing(std::string& str)
 	if (str.back() == '\n')
 		str.pop_back();
 }
+
+std::string EscapeDescription(std::string str)
+{
+	for (auto it = str.begin(); it != str.end(); it++) {
+		if (*it == '\n')
+		{
+			*it = '\\';
+			it = str.insert(it + 1, 'n');
+		}
+		else if (*it == '\t')
+		{
+			*it = '\\';
+			it = str.insert(it + 1, 't');
+		}
+	}
+
+	return str;
+}
+
 
 void DumpConVars()
 {
@@ -261,14 +281,16 @@ void DumpConVars()
 		if (cvar->m_pszHelpString[0])
 		{
 			helpString = cvar->m_pszHelpString;
+			Globals::stringsIgnoreStream << EscapeDescription(helpString) << "\n";
 			FixNewlineTabbing(helpString);
 		}
 
 		output << cvar->m_pszName;
 		WriteValueLine(cvar, output);
 		output << "\n\t" << helpString;
-
 		output << "\n" << std::endl;
+
+		Globals::stringsIgnoreStream << cvar->m_pszName << "\n";
 	}
 }
 
@@ -308,14 +330,16 @@ void DumpCommands()
 		if (command->m_pszHelpString[0])
 		{
 			helpString = command->m_pszHelpString;
+			Globals::stringsIgnoreStream << EscapeDescription(helpString) << "\n";
 			FixNewlineTabbing(helpString);
 		}
 
 		output << command->m_pszName << " (";
 		WriteFlags(command->m_nFlags, output);
 		output << ")\n\t" << helpString;
-
 		output << "\n" << std::endl;
+
+		Globals::stringsIgnoreStream << command->m_pszName << "\n";
 	}
 }
 
