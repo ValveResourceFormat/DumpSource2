@@ -1,8 +1,12 @@
 [submodule "vendor/hl2sdk"]
-	path = vendor/hl2sdk
+	path = vendor/hl2sdk-cs2
 	url = https://github.com/alliedmodders/hl2sdk
 	shallow = true
 [submodule "vendor/fmt"]
 	path = vendor/fmt
 	url = https://github.com/fmtlib/fmt
+	shallow = true
+[submodule "vendor/hl2sdk-dota"]
+	path = vendor/hl2sdk-dota
+	url = https://github.com/alliedmodders/hl2sdk
 	shallow = true

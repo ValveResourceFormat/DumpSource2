@@ -95,9 +95,11 @@ void Plat_ExitProcess(int) {
 	// STUB
 }
 
+#ifdef GAME_CS2
 void Plat_FatalErrorFunc(const tchar* pMsg, ...) {
 	// STUB
 }
+#endif
 
 bool Plat_IsInDebugSession() {
 	// STUB
