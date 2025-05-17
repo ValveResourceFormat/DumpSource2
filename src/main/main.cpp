@@ -54,10 +54,6 @@ int main(int argc, char** argv)
 
 	printf("Dumping\n");
 
-	// TEMP: cs2 and dota/deadlock sdks are mismatched in ICvar vtable right now
-	#ifdef GAME_CS2
-		Dumpers::ConCommands::Dump();
-	#endif
-
+	Dumpers::ConCommands::Dump();
 	Dumpers::Schemas::Dump();
 }

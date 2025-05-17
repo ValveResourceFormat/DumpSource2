@@ -152,11 +152,8 @@ void InitializeAppSystems()
 		g_factoryMap[appSystem.interfaceVersion] = interface;
 		if (appSystem.connect)
 		{
-// TEMP: dota and deadlock is broken rn
-#ifdef GAME_CS2
 			interface->Connect(&AppSystemFactory);
 			interface->Init();
-#endif
 		}
 		else
 		{
