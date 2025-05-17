@@ -1,7 +1,10 @@
 add_definitions(-DMETA_IS_SOURCE2 -D_ITERATOR_DEBUG_LEVEL=0)
 
 if(UNIX)
-	add_definitions(-D_LINUX -DPOSIX -DLINUX -DGNUC -DCOMPILER_GCC -DPLATFORM_64BITS -D_GLIBCXX_USE_CXX11_ABI=0)
+	add_definitions(
+		-D_LINUX -DPOSIX -DLINUX -DGNUC -DCOMPILER_GCC -DPLATFORM_64BITS -D_GLIBCXX_USE_CXX11_ABI=0 -Dstricmp=strcasecmp
+		-D_stricmp=strcasecmp -D_snprintf=snprintf -D_vsnprintf=vsnprintf -DHAVE_STDINT_H
+		)
 	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-libgcc -static-libstdc++")
 elseif(WIN32)
 	add_definitions(
