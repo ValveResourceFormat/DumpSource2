@@ -28,7 +28,7 @@
 
 void Usage()
 {
-	printf("Usage: DumpSource2 <mod name> <output path>\n");
+	printf("Usage: DumpSource2 <output path>\n");
 }
 
 int main(int argc, char** argv)
@@ -39,8 +39,7 @@ int main(int argc, char** argv)
 		return 0;
 	}
 
-	Globals::modName = argv[1];
-	Globals::outputPath = argv[2];
+	Globals::outputPath = argv[1];
 
 	if (!std::filesystem::is_directory(Globals::outputPath))
 	{
@@ -56,8 +55,9 @@ int main(int argc, char** argv)
 	printf("Dumping\n");
 
 	// TEMP: cs2 and dota/deadlock sdks are mismatched in ICvar vtable right now
-	if(Globals::modName == "csgo")
+	#ifdef GAME_CS2
 		Dumpers::ConCommands::Dump();
+	#endif
 
 	Dumpers::Schemas::Dump();
 }

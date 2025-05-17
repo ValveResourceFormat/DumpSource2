@@ -24,7 +24,6 @@
 
 namespace Globals {
 
-	inline std::string modName;
 	inline std::filesystem::path outputPath;
 	inline std::ofstream stringsIgnoreStream;
 

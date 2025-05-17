@@ -138,21 +138,25 @@ void InitializeAppSystems()
 {
 	for (const auto& appSystem : g_appSystems)
 	{
-		if ((appSystem.flags & CS2_ONLY) != 0 && Globals::modName != "csgo")
+#ifndef GAME_CS2
+		if ((appSystem.flags & CS2_ONLY) != 0)
 			continue;
+#endif // !GAME_CS2
 
-		std::string path = appSystem.gameBin ? fmt::format("../../{}/bin/{}", Globals::modName.c_str(), PLATFORM_FOLDER) : "";
+		std::string path = appSystem.gameBin ? fmt::format("../../{}/bin/{}", GAME_PATH, PLATFORM_FOLDER) : "";
 
 		CModule module(path.c_str(), appSystem.moduleName);
 
 		auto interface = module.FindInterface<IAppSystem*>(appSystem.interfaceVersion.c_str());
 
 		g_factoryMap[appSystem.interfaceVersion] = interface;
-
-		if (appSystem.connect && Globals::modName == "csgo")
+		if (appSystem.connect)
 		{
+// TEMP: dota and deadlock is broken rn
+#ifdef GAME_CS2
 			interface->Connect(&AppSystemFactory);
 			interface->Init();
+#endif
 		}
 		else
 		{
