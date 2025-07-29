@@ -57,4 +57,5 @@ class DumperApplication : public CTier0AppSystem<IAppSystem>
 	virtual void* unk11() { return nullptr; };
 	virtual void* AddSystemDontLoadStartupManifests(const char* a, const char* b) { return nullptr; };
 	virtual void* unk12() { return nullptr; };
+	virtual void* unk13() { return nullptr; };
 };

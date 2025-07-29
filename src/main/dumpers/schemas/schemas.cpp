@@ -20,7 +20,6 @@
 #include "schemas.h"
 #include "globalvariables.h"
 #include "interfaces.h"
-#include "schemasystem/schemasystem.h"
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -32,6 +31,9 @@
 #include <fmt/format.h>
 #include "metadata_stringifier.h"
 #include <spdlog/spdlog.h>
+#define private public
+#include "schemasystem/schemasystem.h"
+#undef private
 
 namespace Dumpers::Schemas
 {
@@ -197,7 +199,8 @@ void Dump()
 
 	std::map<std::string, std::unordered_set<std::string>> foundFiles;
 
-	for (auto i = 0; i < typeScopes.GetNumStrings(); ++i)
+	// poggu: this used to be typeScopes.GetNumStrings() but after the 29/07/2025 cs2 engine sync this caused out of bounds access to the internal vector
+	for (auto i = 0; i < typeScopes.m_Vector.Count(); ++i)
 		DumpTypeScope(typeScopes[i], schemaPath, foundFiles);
 
 	DumpTypeScope(schemaSystem->GlobalTypeScope(), schemaPath, foundFiles);
