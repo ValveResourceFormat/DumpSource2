@@ -30,6 +30,7 @@
 #include <fmt/format.h>
 #include "metadata_stringifier.h"
 #include <modules.h>
+#include <unordered_set>
 
 class SimpleCUtlString {
 public:
@@ -42,6 +43,14 @@ private:
 
 namespace Dumpers::Schemas
 {
+
+	std::unordered_set<std::string> g_classWithBrokenDefaults =
+	{
+		"CastSphereSATParams_t",
+		"Dop26_t",
+		"FourCovMatrices3",
+		"VMixVocoderDesc_t",
+	};
 
   // Any function called after this will have uninitialized variables set to zero
 #ifdef WIN32
@@ -121,7 +130,7 @@ namespace Dumpers::Schemas
 				typedef void* (*GetKV3DefaultsFn)();
 				typedef int (*SaveKV3AsJsonFn)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
 
-				if (!entry.m_pData || !(*(void**)entry.m_pData) || !strcmp(metadataTargetName, "CastSphereSATParams_t")) return "Could not parse KV3 Defaults";
+				if (!entry.m_pData || !(*(void**)entry.m_pData) || g_classWithBrokenDefaults.contains(metadataTargetName)) return "Could not parse KV3 Defaults";
 
 			  CleanStack(); // Prepare stack for uninitialized variables in class constructor inside GetKV3Defaults
 				auto value = reinterpret_cast<GetKV3DefaultsFn>(*(void**)entry.m_pData)();
