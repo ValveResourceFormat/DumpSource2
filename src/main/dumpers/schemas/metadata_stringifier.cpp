@@ -30,9 +30,6 @@
 #include <fmt/format.h>
 #include "metadata_stringifier.h"
 #include <modules.h>
-#include "../../vendor/json.hpp"
-
-using json = nlohmann::ordered_json;
 
 class SimpleCUtlString {
 public:
@@ -45,29 +42,6 @@ private:
 
 namespace Dumpers::Schemas
 {
-
-	// Recursively replace all primitive values in JSON with their defaults
-	void NormalizePrimitiveValues(json& j) {
-		if (j.is_number_integer()) {
-			j = 0;
-		}
-		else if (j.is_number_float()) {
-			j = 0.0;
-		}
-		else if (j.is_boolean()) {
-			j = false;
-		}
-		else if (j.is_array()) {
-			for (auto& element : j) {
-				NormalizePrimitiveValues(element);
-			}
-		}
-		else if (j.is_object()) {
-			for (auto& [key, value] : j.items()) {
-				NormalizePrimitiveValues(value);
-			}
-		}
-	}
 
 	// Determine how and if to output metadata entry value based on it's type.
 	std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName)
@@ -131,7 +105,7 @@ namespace Dumpers::Schemas
 			}
 			case MetadataValueType::KV3DEFAULTS:
 				typedef void* (*GetKV3DefaultsFn)();
-				typedef int (*SaveKV3AsJsonFn)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
+				typedef int (*SaveKV3Text_NoHeaderFn)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str, int flags);
 
 				if (!entry.m_pData || !(*(void**)entry.m_pData) || !strcmp(metadataTargetName, "CastSphereSATParams_t")) return "Could not parse KV3 Defaults";
 
@@ -140,45 +114,21 @@ namespace Dumpers::Schemas
 				if (!value) return "Could not parse KV3 Defaults";
 
 #ifdef WIN32
-				static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>("?SaveKV3AsJSON@@YA_NPEBVKeyValues3@@PEAVCUtlString@@1@Z");
+				static auto SaveKV3Text_NoHeader = Modules::tier0->GetSymbol<SaveKV3Text_NoHeaderFn>("?SaveKV3Text_NoHeader@@YA_NPEBVKeyValues3@@PEAVCUtlString@@1I@Z");
 #else
-				static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>("_Z13SaveKV3AsJSONPK10KeyValues3P10CUtlStringS3_");
+				static auto SaveKV3Text_NoHeader = Modules::tier0->GetSymbol<SaveKV3Text_NoHeaderFn>("_Z20SaveKV3Text_NoHeaderPK10KeyValues3P10CUtlStringS3_j");
 #endif
-				if (!SaveKV3AsJson) {
-					spdlog::critical("SaveKV3AsJson not found");
+				if (!SaveKV3Text_NoHeader) {
+					spdlog::critical("SaveKV3Text_NoHeader not found");
 					return {};
 				}
 
 				SimpleCUtlString err;
 				SimpleCUtlString buf;
-				int res = SaveKV3AsJson(*(void**)value, err, buf);
+				int res = SaveKV3Text_NoHeader(*(void**)value, err, buf, 0);
 
 				if (res) {
-					std::string out = buf.Get();
-
-					// Fix invalid JSON values produced by SaveKV3AsJson bug (e.g., -nan, nan)
-					size_t pos = 0;
-					while ((pos = out.find("nan", pos)) != std::string::npos) {
-						bool validPrefix = (pos == 0 || out[pos - 1] == ' ' || out[pos - 1] == '\t' || out[pos - 1] == '\n' || out[pos - 1] == '-');
-						bool validSuffix = (pos + 3 >= out.length() || out[pos + 3] == ' ' || out[pos + 3] == '\n' || out[pos + 3] == ',');
-
-						if (validPrefix && validSuffix) {
-							out[pos] = '0';
-							out[pos + 1] = '.';
-							out[pos + 2] = '0';
-						}
-						++pos;
-					}
-
-					try {
-						auto jsonObj = json::parse(out);
-						NormalizePrimitiveValues(jsonObj);
-						return jsonObj.dump(1, '\t');
-					}
-					catch (const json::parse_error& e) {
-						spdlog::warn("Failed to parse KV3 JSON for normalization: {}\nJSON content:\n{}", e.what(), out);
-						return out;
-					}
+					return buf.Get();
 				}
 
 				return "Could not parse KV3 Defaults";
