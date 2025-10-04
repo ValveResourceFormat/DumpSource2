@@ -20,15 +20,10 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "schemas.h"
 #include "globalvariables.h"
 #include "interfaces.h"
-#include "schemasystem/schemasystem.h"
 #include <filesystem>
-#include <fstream>
 #include <map>
-#include <unordered_set>
-#include <algorithm>
 #include "metadatalist.h"
 #include <optional>
 #include <cstring>
@@ -36,6 +31,9 @@
 #include "metadata_stringifier.h"
 #include <modules.h>
 #include <regex>
+#include "../../vendor/json.hpp"
+
+using json = nlohmann::ordered_json;
 
 class SimpleCUtlString {
 public:
@@ -49,364 +47,37 @@ private:
 namespace Dumpers::Schemas
 {
 
-std::map<std::string, std::vector<std::regex>> g_replaceMap{
-	{
-		"CTestBlendContainer",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
+	// Recursively replace all primitive values in JSON with their defaults
+	void NormalizePrimitiveValues(json& j) {
+		if (j.is_number_integer()) {
+			j = 0;
 		}
-	},
-	{
-		"CVoiceContainerDefault",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
+		else if (j.is_number_float()) {
+			j = 0.0;
 		}
-	},
-	{
-		"CVoiceContainerLoopTrigger",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
+		else if (j.is_boolean()) {
+			j = false;
 		}
-	},
-	{
-		"CVoiceContainerNull",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
+		else if (j.is_array()) {
+			for (auto& element : j) {
+				NormalizePrimitiveValues(element);
+			}
 		}
-	},
-	{
-		"CVoiceContainerBlender",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
-			std::regex(R"#(("m_flBlendFactor":) .*,)#"),
+		else if (j.is_object()) {
+			for (auto& [key, value] : j.items()) {
+				NormalizePrimitiveValues(value);
+			}
 		}
-	},
-	{
-		"CVoiceContainerDecayingSineWave",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
-		}
-	},
-	{
-		"CVoiceContainerEnvelope",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
-		}
-	},
-	{
-		"CVoiceContainerSet",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
-		}
-	},
-	{
-		"CVoiceContainerStaticAdditiveSynth",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
-		}
-	},
-	{
-		"CVoiceContainerRealtimeFMSineWave",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
-		}
-	},
-	{
-		"CVoiceContainerSwitch",
-		{
-			std::regex(R"#(("m_nStreamingSize":) .*,)#"),
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-			std::regex(R"#(("m_nSampleCount":) .*,)#"),
-			std::regex(R"#(("m_nLoopStart":) .*,)#"),
-			std::regex(R"#(("m_nLoopEnd":) .*,)#"),
-			std::regex(R"#(("m_nChannels":) .*,)#"),
-		}
-	},
-	{
-		"VMixDynamics3BandDesc_t",
-		{
-			std::regex(R"#(("m_fldbKneeWidth":) .*,)#"),
-			std::regex(R"#(("m_flLowCutoffFreq":) .*,)#"),
-		}
-	},
-		{
-		"VMixVocoderDesc_t",
-		{
-			std::regex(R"#(("m_fldBModGain":) .*,)#"),
-		}
-	},
-	{
-		"CLookAtUpdateNode",
-		{
-			std::regex(R"#(("m_target":) .*,)#"),
-		}
-	},
-	{
-		"CFootLockUpdateNode",
-		{
-			std::regex(R"#(("m_flTiltPlanePitchSpringStrength":) .*,)#"),
-			std::regex(R"#(("m_flTiltPlaneRollSpringStrength":) .*,)#"),
-		}
-	},
-	{
-		"CBlockSelectionMetricEvaluator",
-		{
-			std::regex(R"#(("m_means":)[\s\S]*?\],)#"),
-			std::regex(R"#(("m_standardDeviations":)[\s\S]*?\],)#"),
-		}
-	},
-	{
-		"CFeNamedJiggleBone",
-		{
-			std::regex(R"#(("m_transform":)[\s\S]*?\],)#"),
-			std::regex(R"#(("m_nJiggleParent":) .*,)#"),
-		}
-	},
-	{
-		"Dop26_t",
-		{
-			std::regex(R"#(("m_flSupport":)[\s\S]*?\])#"),
-		}
-	},
-	{
-		"FourCovMatrices3",
-		{
-			std::regex(R"#(("m_vDiag":)[\s\S]*?\],)#"),
-		}
-	},
-	{
-		"CVoxelVisibility",
-		{
-			std::regex(R"#(("m_nOffset":) .*,)#"),
-			std::regex(R"#(("m_nElementCount":) .*)#"),
-		}
-	},
-	{
-		"CDOTAFightingGameActionDefinition",
-		{
-			std::regex(R"#(("m_nActionID":) .*,)#"),
-		}
-	},
-	{
-		"CDOTAMinesweeperGameDefinition",
-		{
-			std::regex(R"#(("m_flTimeLimit":) .*,)#"),
-			std::regex(R"#(("m_nStageProgressionTimerIncrease":) .*,)#"),
-			std::regex(R"#(("m_nTimerIncreaseExpireClicks":) .*,)#"),
-			std::regex(R"#(("m_nTimerIncreaseChance":) .*,)#"),
-			std::regex(R"#(("m_nIllusionManaCost":) .*,)#"),
-		}
-	},
-	{
-		"CDOTAOverworldDefinition",
-		{
-			std::regex(R"#(("m_eAssociatedEvent":) .*,)#"),
-		}
-	},
-	{
-		"CSurvivorsGameModeDefinition",
-		{
-			std::regex(R"#(("m_vCollisionIndicatorColorPlayer":)[\s\S]*?\],)#"),
-			std::regex(R"#(("m_vCollisionIndicatorColorEnemy":)[\s\S]*?\],)#"),
-		}
-	},
-	{
-		"CSurvivorsPowerUpDefinition",
-		{
-			std::regex(R"#(("m_vWarmupEffectColor":)[\s\S]*?\],)#"),
-		}
-	},
-	{
-		"AimMatrixOpFixedSettings_t",
-		{
-			std::regex(R"#(("m_influenceRotations":)[\s\S]*?\],)#"),
-			std::regex(R"#(("m_influenceOffsets":)[\s\S]*?\],)#"),
-		}
-	},
-	{
-		"CLeanMatrixUpdateNode",
-		{
-			std::regex(R"#(("m_frameCorners":)[\s\S]*?\],)#"),
-		}
-	},
-	{
-		"CMotionGraphGroup",
-		{
-			std::regex(R"#(("m_nCentroids":) .*,)#"),
-			std::regex(R"#(("m_nDimensions":) .*,)#"),
-		}
-	},
-	{
-		"LookAtOpFixedSettings_t",
-		{
-			std::regex(R"#(("m_influenceRotations":)[\s\S]*?\],)#"),
-		}
-	},
-	{
-		"CDOTACandyShopDefinition",
-		{
-			std::regex(R"#(("m_unDefaultInventorySize":) .*,)#"),
-			std::regex(R"#(("m_unMaximumInventorySize":) .*,)#"),
-			std::regex(R"#(("m_unDefaultRerollCharges":) .*,)#"),
-			std::regex(R"#(("m_unDefaultMaxRerollCharges":) .*,)#"),
-			std::regex(R"#(("m_unFixedExchangeRecipeStartDate":) .*,)#"),
-			std::regex(R"#(("m_unFixedExchangeRecipeUpdateRateInSeconds":) .*,)#"),
-			std::regex(R"#(("m_unFixedExchangeRecipeDefaultCount":) .*,)#"),
-			std::regex(R"#(("m_unFixedExchangeRecipeMaximumCount":) .*,)#"),
-			std::regex(R"#(("m_unVariableExchangeInputCandyCount":) .*,)#"),
-			std::regex(R"#(("m_unVariableExchangeOutputCandyCount":) .*,)#"),
-			std::regex(R"#(("m_eExpireEvent":) .*,)#"),
-		}
-	},
-	{
-		"CDOTARoadToTIChallengeDefinition",
-		{
-			std::regex(R"#(("m_eEvent":) .*,)#"),
-			std::regex(R"#(("m_unTotalQuestPeriods":) .*,)#"),
-			std::regex(R"#(("m_unHeroesPerQuest":) .*,)#"),
-		}
-	},
-	{
-		"CSurvivorsPowerUpDefinition_MortimerKisses",
-		{
-			std::regex(R"#(("m_vWarmupEffectColor":)[\s\S]*?\],)#"),
-		}
-	},
-	{
-		"CSurvivorsSpawnerDestructiblesDefinition",
-		{
-			std::regex(R"#(("m_flPerpendicularWallSpacing":) .*,)#"),
-		}
-	},
-	{
-		"CSurvivorsSpawnerTowerDefinition",
-		{
-			std::regex(R"#(("m_flPerpendicularWallSpacing":) .*,)#"),
-		}
-	},
-	{
-		"CPhysSurfaceProperties",
-		{
-			std::regex(R"#(("m_nameHash":) .*,)#"),
-			std::regex(R"#(("m_baseNameHash":) .*,)#"),
-		}
-	},
-	{
-		"SkeletonAnimCapture_t__Frame_t",
-		{
-			std::regex(R"#(("m_flTime":) .*,)#"),
-		}
-	},
-	{
-		"CFeMorphLayer",
-		{
-			std::regex(R"#(("m_nNameHash":) .*,)#"),
-		}
-	},
-	{
-		"CSSDSMsg_ViewRender",
-		{
-			std::regex(R"#(("m_nFrameCount":) .*,)#"),
-		}
-	},
-	{
-		"VMixModDelayDesc_t",
-		{
-			std::regex(R"#(("m_flDelay":) .*,)#"),
-		}
-	},
-	{
-		"CVoiceContainerAmpedDecayingSineWave",
-		{
-			std::regex(R"#(("m_nRate":) .*,)#"),
-			std::regex(R"#(("m_nFormat":) .*,)#"),
-		}
-	},
-	{
-		"ClutterSceneObject_t",
-		{
-			std::regex(R"#(("m_vMinBounds":)[\s\S]*?\],)#"),
-			std::regex(R"#(("m_vMaxBounds":)[\s\S]*?\],)#"),
-		}
-	},
-	{
-		"ClutterTile_t",
-		{
-			std::regex(R"#(("m_vMinBounds":)[\s\S]*?\],)#"),
-			std::regex(R"#(("m_vMaxBounds":)[\s\S]*?\],)#"),
-		}
-	},
-};
+	}
 
-// Determine how and if to output metadata entry value based on it's type.
-std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName)
-{
-	if (g_mapMetadataNameToValue.find(entry.m_pszName) != g_mapMetadataNameToValue.end())
+	// Determine how and if to output metadata entry value based on it's type.
+	std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName)
 	{
-		auto valueType = g_mapMetadataNameToValue.at(entry.m_pszName);
-		switch (valueType)
+		if (g_mapMetadataNameToValue.find(entry.m_pszName) != g_mapMetadataNameToValue.end())
 		{
+			auto valueType = g_mapMetadataNameToValue.at(entry.m_pszName);
+			switch (valueType)
+			{
 			case MetadataValueType::STRING:
 			{
 				auto value = *static_cast<const char**>(entry.m_pData);
@@ -437,7 +108,7 @@ std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& ent
 					// @note: hotfix for the deadlock 14/09/24 update,
 					// where they filled some ptrs with -1 instead of nullptr
 					return ptr != nullptr && ptr != reinterpret_cast<const char*>(-1);
-				};
+					};
 
 				std::stringstream stringStream;
 				auto hasType = check_ptr(value->m_pszType);
@@ -485,23 +156,26 @@ std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& ent
 
 				if (res) {
 					std::string out = buf.Get();
-					if (g_replaceMap.find(metadataTargetName) != g_replaceMap.end())
-					{
-						const auto& regexVector = g_replaceMap.at(metadataTargetName);
 
-						for (const auto& regex : regexVector) {
-							out = std::regex_replace(out, regex, "$1 <HIDDEN FOR DIFF>,");
-						}
+					// Fix invalid JSON values produced by SaveKV3AsJson bug (e.g., -nan, nan)
+					out = std::regex_replace(out, std::regex(R"(\s-?nan(\s|,))"), " 0.0$1");
+
+					try {
+						auto jsonObj = json::parse(out);
+						NormalizePrimitiveValues(jsonObj);
+						return jsonObj.dump(1, '\t');
 					}
-
-					return out;
+					catch (const json::parse_error& e) {
+						spdlog::warn("Failed to parse KV3 JSON for normalization: {}\nJSON content:\n{}", e.what(), out);
+						return out;
+					}
 				}
 
 				return "Could not parse KV3 Defaults";
+			}
 		}
-	}
 
-	return {};
-}
+		return {};
+	}
 
 } // namespace Dumpers::Schemas
