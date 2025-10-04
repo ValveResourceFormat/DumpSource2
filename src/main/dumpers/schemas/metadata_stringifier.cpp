@@ -30,7 +30,6 @@
 #include <fmt/format.h>
 #include "metadata_stringifier.h"
 #include <modules.h>
-#include <regex>
 #include "../../vendor/json.hpp"
 
 using json = nlohmann::ordered_json;
@@ -158,7 +157,18 @@ namespace Dumpers::Schemas
 					std::string out = buf.Get();
 
 					// Fix invalid JSON values produced by SaveKV3AsJson bug (e.g., -nan, nan)
-					out = std::regex_replace(out, std::regex(R"(\s-?nan(\s|,))"), " 0.0$1");
+					size_t pos = 0;
+					while ((pos = out.find("nan", pos)) != std::string::npos) {
+						bool validPrefix = (pos == 0 || out[pos - 1] == ' ' || out[pos - 1] == '\t' || out[pos - 1] == '\n' || out[pos - 1] == '-');
+						bool validSuffix = (pos + 3 >= out.length() || out[pos + 3] == ' ' || out[pos + 3] == '\n' || out[pos + 3] == ',');
+
+						if (validPrefix && validSuffix) {
+							out[pos] = '0';
+							out[pos + 1] = '.';
+							out[pos + 2] = '0';
+						}
+						++pos;
+					}
 
 					try {
 						auto jsonObj = json::parse(out);
