@@ -101,7 +101,25 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::filesystem::path schema
 		Globals::stringsIgnoreStream << classInfo->m_pszName << "\n";
 
 		if (classInfo->m_nBaseClassCount > 0)
-			output << " : public " << classInfo->m_pBaseClasses[0].m_pClass->m_pszName;
+		{
+			bool wroteBase = false;
+			for (uint16_t baseIndex = 0; baseIndex < classInfo->m_nBaseClassCount; ++baseIndex)
+			{
+				const auto* baseClass = classInfo->m_pBaseClasses[baseIndex].m_pClass;
+				if (!baseClass)
+					continue;
+
+				if (!wroteBase)
+				{
+					output << " : public " << baseClass->m_pszName;
+					wroteBase = true;
+				}
+				else
+				{
+					output << ", public " << baseClass->m_pszName;
+				}
+			}
+		}
 
 		output << "\n{\n";
 
