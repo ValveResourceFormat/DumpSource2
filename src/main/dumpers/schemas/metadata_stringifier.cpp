@@ -69,6 +69,15 @@ namespace Dumpers::Schemas
 		}
 	}
 
+	// Any function called after this will have uninitialized variables set to zero
+	void CleanStack() {
+			// stack size might need to be increased for larger classes (perhaps use alloca with class size + extra)
+			volatile char stack[0x10000]; 
+			for(size_t i = 0; i < sizeof(stack); ++i) {
+				stack[i] = 0;
+			}
+	}
+
 	// Determine how and if to output metadata entry value based on it's type.
 	std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName)
 	{
@@ -135,6 +144,7 @@ namespace Dumpers::Schemas
 
 				if (!entry.m_pData || !(*(void**)entry.m_pData) || !strcmp(metadataTargetName, "CastSphereSATParams_t")) return "Could not parse KV3 Defaults";
 
+			  CleanStack(); // Prepare stack for uninitialized variables in class constructor inside GetKV3Defaults
 				auto value = reinterpret_cast<GetKV3DefaultsFn>(*(void**)entry.m_pData)();
 
 				if (!value) return "Could not parse KV3 Defaults";
