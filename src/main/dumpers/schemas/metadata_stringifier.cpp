@@ -30,9 +30,6 @@
 #include <fmt/format.h>
 #include "metadata_stringifier.h"
 #include <modules.h>
-#include "../../vendor/json.hpp"
-
-using json = nlohmann::ordered_json;
 
 class SimpleCUtlString {
 public:
@@ -46,41 +43,18 @@ private:
 namespace Dumpers::Schemas
 {
 
-	// Recursively replace all primitive values in JSON with their defaults
-	void NormalizePrimitiveValues(json& j) {
-		if (j.is_number_integer()) {
-			j = 0;
-		}
-		else if (j.is_number_float()) {
-			j = 0.0;
-		}
-		else if (j.is_boolean()) {
-			j = false;
-		}
-		else if (j.is_array()) {
-			for (auto& element : j) {
-				NormalizePrimitiveValues(element);
-			}
-		}
-		else if (j.is_object()) {
-			for (auto& [key, value] : j.items()) {
-				NormalizePrimitiveValues(value);
-			}
-		}
-	}
-
-	// Any function called after this will have uninitialized variables set to zero
+  // Any function called after this will have uninitialized variables set to zero
 #ifdef WIN32
 	__declspec(noinline)
 #else
 	__attribute__((noinline))
 #endif
 	void CleanStack() {
-			// stack size might need to be increased for larger classes (perhaps use alloca with class size + extra)
-			volatile char stack[0x10000]; 
-			for(size_t i = 0; i < sizeof(stack); ++i) {
-				stack[i] = 0;
-			}
+		// stack size might need to be increased for larger classes (perhaps use alloca with class size + extra)
+		volatile char stack[0x10000]; 
+		for(size_t i = 0; i < sizeof(stack); ++i) {
+			stack[i] = 0;
+		}
 	}
 
 	// Determine how and if to output metadata entry value based on it's type.
@@ -169,31 +143,7 @@ namespace Dumpers::Schemas
 				int res = SaveKV3AsJson(*(void**)value, err, buf);
 
 				if (res) {
-					std::string out = buf.Get();
-
-					// Fix invalid JSON values produced by SaveKV3AsJson bug (e.g., -nan, nan)
-					size_t pos = 0;
-					while ((pos = out.find("nan", pos)) != std::string::npos) {
-						bool validPrefix = (pos == 0 || out[pos - 1] == ' ' || out[pos - 1] == '\t' || out[pos - 1] == '\n' || out[pos - 1] == '-');
-						bool validSuffix = (pos + 3 >= out.length() || out[pos + 3] == ' ' || out[pos + 3] == '\n' || out[pos + 3] == ',');
-
-						if (validPrefix && validSuffix) {
-							out[pos] = '0';
-							out[pos + 1] = '.';
-							out[pos + 2] = '0';
-						}
-						++pos;
-					}
-
-					try {
-						auto jsonObj = json::parse(out);
-						NormalizePrimitiveValues(jsonObj);
-						return jsonObj.dump(1, '\t');
-					}
-					catch (const json::parse_error& e) {
-						spdlog::warn("Failed to parse KV3 JSON for normalization: {}\nJSON content:\n{}", e.what(), out);
-						return out;
-					}
+					return buf.Get();
 				}
 
 				return "Could not parse KV3 Defaults";
