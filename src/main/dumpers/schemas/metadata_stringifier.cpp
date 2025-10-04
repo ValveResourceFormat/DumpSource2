@@ -70,6 +70,11 @@ namespace Dumpers::Schemas
 	}
 
 	// Any function called after this will have uninitialized variables set to zero
+#ifdef WIN32
+	__declspec(noinline)
+#else
+	__attribute__((noinline))
+#endif
 	void CleanStack() {
 			// stack size might need to be increased for larger classes (perhaps use alloca with class size + extra)
 			volatile char stack[0x10000]; 
