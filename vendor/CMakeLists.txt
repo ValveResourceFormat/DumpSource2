@@ -41,8 +41,8 @@ function(BUILD_HL2SDK GAME GAME_PATH)
 endfunction()
 
 build_hl2sdk(CS2 hl2sdk-cs2)
-build_hl2sdk(DOTA hl2sdk-deadlock)
-build_hl2sdk(DEADLOCK hl2sdk-deadlock)
+build_hl2sdk(DOTA hl2sdk-cs2)
+build_hl2sdk(DEADLOCK hl2sdk-cs2)
 
 # EXTERNAL LIBRARIES
 # ---
