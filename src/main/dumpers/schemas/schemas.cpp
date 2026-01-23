@@ -70,10 +70,11 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::filesystem::path schema
 {
 	FOR_EACH_MAP(typeScope->m_DeclaredClasses.m_Map, iter)
 	{
-		const auto classInfo = typeScope->m_DeclaredClasses.m_Map.Element(iter)->m_pClassInfo;
+		const auto schemaClass = typeScope->m_DeclaredClasses.m_Map.Element(iter);
+		const auto classInfo = schemaClass->m_pClassInfo;
 		if (!classInfo)
 		{
-		  spdlog::warn("Null classInfo in {} type scope", typeScope->GetScopeName());
+		  spdlog::warn("Null classInfo: {}::{}", typeScope->GetScopeName(), schemaClass->m_sTypeName.Get());
 			continue;
 		}
 
@@ -147,10 +148,11 @@ void DumpEnums(CSchemaSystemTypeScope* typeScope, std::filesystem::path schemaPa
 {
 	FOR_EACH_MAP(typeScope->m_DeclaredEnums.m_Map, iter)
 	{
-		const auto enumInfo = typeScope->m_DeclaredEnums.m_Map.Element(iter)->m_pEnumInfo;
+	  const auto schemaEnum = typeScope->m_DeclaredEnums.m_Map.Element(iter);
+		const auto enumInfo = schemaEnum->m_pEnumInfo;
 		if (!enumInfo)
 		{
-			spdlog::warn("Null enumInfo in {} type scope", typeScope->GetScopeName());
+			spdlog::warn("Null enumInfo {}::{}", typeScope->GetScopeName(), schemaEnum->m_sTypeName.Get());
 			continue;
 		}
 
