@@ -49,6 +49,7 @@ std::unordered_set<std::string> g_classWithBrokenDefaults =
 	"Dop26_t",
 	"FourCovMatrices3",
 	"VMixVocoderDesc_t",
+	"CCitadelPlayerPawn_GraphController2"
 };
 
 // Any function called after this will have uninitialized variables set to zero
