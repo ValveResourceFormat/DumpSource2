@@ -71,6 +71,8 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::filesystem::path schema
 	FOR_EACH_MAP(typeScope->m_DeclaredClasses.m_Map, iter)
 	{
 		const auto classInfo = typeScope->m_DeclaredClasses.m_Map.Element(iter)->m_pClassInfo;
+		if (!classInfo)
+			continue;
 
 		if (!std::filesystem::is_directory(schemaPath / classInfo->m_pszProjectName))
 			if (!std::filesystem::create_directory(schemaPath / classInfo->m_pszProjectName))
