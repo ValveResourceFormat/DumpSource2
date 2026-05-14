@@ -30,6 +30,20 @@ using json = nlohmann::json;
 namespace Dumpers::Schemas::JsonExporter
 {
 
+static bool IsFlagsEnum(const std::vector<IntermediateSchemaEnumMember>& members)
+{
+	bool hasNonZero = false;
+	for (const auto& m : members)
+	{
+		if (m.value <= 0)
+			continue;
+		hasNonZero = true;
+		if ((m.value & (m.value - 1)) != 0)
+			return false;
+	}
+	return hasNonZero;
+}
+
 json SerializeMetadataArray(const std::vector<IntermediateMetadata>& metadataVector)
 {
 	json arr = json::array();

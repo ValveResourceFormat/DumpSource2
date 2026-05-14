@@ -43,7 +43,9 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSche
 		IntermediateSchemaClass schemaClass{
 			.name = std::string(classInfo->m_pszName),
 			.module = std::string(classInfo->m_pszProjectName),
-			.size = classInfo->m_nSize
+			.size = classInfo->m_nSize,
+			.alignment = classInfo->m_nAlignment,
+			.isAbstract = (classInfo->m_nFlags1 & SCHEMA_CF1_IS_ABSTRACT) != 0,
 		};
 
 		spdlog::trace("Dumping class: '{}'", classInfo->m_pszName);
@@ -68,7 +70,7 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSche
 				if (!baseClass)
 					continue;
 
-				schemaClass.parents.emplace_back(std::string(baseClass->m_pszName), std::string(baseClass->m_pszProjectName));
+				schemaClass.parents.emplace_back(std::string(baseClass->m_pszName), std::string(baseClass->m_pszProjectName), (int32_t)classInfo->m_pBaseClasses[baseIndex].m_nOffset);
 			}
 		}
 

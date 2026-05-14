@@ -36,6 +36,7 @@ struct IntermediateSchemaClassParent
 {
 	std::string name;
 	std::string module;
+	int32_t offset;
 };
 
 struct IntermediateSchemaClassField
@@ -51,6 +52,8 @@ struct IntermediateSchemaClass
 	std::string name;
 	std::string module;
 	int32_t size;
+	uint8_t alignment;
+	bool isAbstract;
 	std::vector<IntermediateMetadata> metadata;
 	std::vector<IntermediateSchemaClassParent> parents;
 	std::vector<IntermediateSchemaClassField> fields;
