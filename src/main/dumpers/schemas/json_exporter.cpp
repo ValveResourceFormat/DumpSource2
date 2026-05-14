@@ -62,6 +62,7 @@ json SerializeType(CSchemaType* type)
 			break;
 		case SCHEMA_TYPE_POINTER:
 			j["category"] = "ptr";
+			j["nullable"] = true;
 			j["inner"] = SerializeType(static_cast<CSchemaType_Ptr*>(type)->m_pObjectType);
 			break;
 		case SCHEMA_TYPE_FIXED_ARRAY:
@@ -78,18 +79,34 @@ json SerializeType(CSchemaType* type)
 
 			// Extract outer name from m_sTypeName before '<'
 			std::string typeName = type->m_sTypeName.String();
+			std::string outerName;
 			auto pos = typeName.find('<');
 			if (pos != std::string::npos)
 			{
-				auto name = typeName.substr(0, pos);
-				// Trim trailing whitespace
-				while (!name.empty() && name.back() == ' ')
-					name.pop_back();
-				j["name"] = name;
+				outerName = typeName.substr(0, pos);
+				while (!outerName.empty() && outerName.back() == ' ')
+					outerName.pop_back();
 			}
 			else
 			{
-				j["name"] = typeName;
+				outerName = typeName;
+			}
+			j["name"] = outerName;
+
+			if (outerName == "CHandle")
+			{
+				j["handle_kind"] = "entity";
+				j["nullable"] = true;
+			}
+			else if (outerName == "CWeakHandle")
+			{
+				j["handle_kind"] = "weak";
+				j["nullable"] = true;
+			}
+			else if (outerName == "CStrongHandle")
+			{
+				j["handle_kind"] = "strong";
+				j["nullable"] = true;
 			}
 
 			if (type->m_eAtomicCategory == SCHEMA_ATOMIC_T ||
@@ -154,6 +171,10 @@ void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, json& clas
 		classObj["name"] = intermediateClass.name;
 		classObj["module"] = intermediateClass.module;
 		classObj["size"] = intermediateClass.size;
+		if (intermediateClass.alignment != 0)
+			classObj["alignment"] = intermediateClass.alignment;
+		if (intermediateClass.isAbstract)
+			classObj["abstract"] = true;
 
 		auto classMetadataArr = SerializeMetadataArray(intermediateClass.metadata);
 		if (classMetadataArr.size())
@@ -165,6 +186,7 @@ void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, json& clas
 			json parentObj;
 			parentObj["name"] = parent.name;
 			parentObj["module"] = parent.module;
+			parentObj["offset"] = parent.offset;
 			parents.push_back(std::move(parentObj));
 		}
 
@@ -202,6 +224,16 @@ void DumpEnums(const std::vector<IntermediateSchemaEnum>& enums, json& enumsArra
 		enumObj["name"] = intermediateEnum.name;
 		enumObj["module"] = intermediateEnum.module;
 		enumObj["alignment"] = intermediateEnum.stringAlignment;
+		if (intermediateEnum.stringAlignment.has_value())
+		{
+			const auto& align = *intermediateEnum.stringAlignment;
+			if (align == "uint8_t")       enumObj["storage_size"] = 1;
+			else if (align == "uint16_t") enumObj["storage_size"] = 2;
+			else if (align == "uint32_t") enumObj["storage_size"] = 4;
+			else if (align == "uint64_t") enumObj["storage_size"] = 8;
+		}
+		if (IsFlagsEnum(intermediateEnum.members))
+			enumObj["flags"] = true;
 
 		auto enumMetadataArr = SerializeMetadataArray(intermediateEnum.metadata);
 		if (enumMetadataArr.size())
@@ -254,7 +286,7 @@ void Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<In
 	root["enums"] = enumsArray;
 
 	std::ofstream output(Globals::outputPath / "schemas.json");
-	output << root.dump(-1);
+	output << root.dump(2) << "\n";
 	output.close();
 
 	spdlog::info("Wrote schemas.json ({} classes, {} enums)", classesArray.size(), enumsArray.size());
