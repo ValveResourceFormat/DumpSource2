@@ -21,7 +21,7 @@ function(BUILD_GAME GAME GAME_PATH SDK)
 endfunction()
 
 # build_game(GAME, GAME_PATH, SDK) - SDK selects which vendor/hl2sdk-* to link
-build_game(CS2 csgo CS2)
+build_game(CS2 csgo DOTA)
 build_game(DOTA dota DOTA)
 build_game(DEADLOCK citadel DEADLOCK)
 
