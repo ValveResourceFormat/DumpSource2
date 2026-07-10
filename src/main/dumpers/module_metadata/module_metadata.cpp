@@ -24,71 +24,135 @@
 #include "utils/common.h"
 #include "globalvariables.h"
 #include "keyvalues3.h"
+#include <cstring>
+#include <dlfcn.h>
+#include <fstream>
 #include <unordered_set>
 
 namespace Dumpers::ModuleMetadata
 {
 
-void GetModuleMetadata(const CModule& module, SimpleCUtlString& err, SimpleCUtlString& buf)
+namespace
+{
+
+typedef void* (*ExtractModuleMetadataFn)(SimpleCUtlString& str);
+typedef int (*SaveKV3Text_ToStringFn)(KV3ID_t const&, void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
+
+SaveKV3Text_ToStringFn GetSaveKV3TextToString()
+{
+#ifdef WIN32
+	return Modules::tier0->GetSymbol<SaveKV3Text_ToStringFn>("?SaveKV3Text_ToString@@YA_NAEBUKV3ID_t@@PEBVKeyValues3@@PEAVCUtlString@@2I@Z");
+#else
+	return Modules::tier0->GetSymbol<SaveKV3Text_ToStringFn>("_Z20SaveKV3Text_ToStringRK7KV3ID_tPK10KeyValues3P10CUtlStringS6_j");
+#endif
+}
+
+ExtractModuleMetadataFn TryGetExtractModuleMetadata(const CModule& module)
+{
+	return reinterpret_cast<ExtractModuleMetadataFn>(dlsym(module.m_hModule, "ExtractModuleMetadata"));
+}
+
+} // namespace
+
+bool GetModuleMetadata(const CModule& module, SimpleCUtlString& err, SimpleCUtlString& buf)
 {
 	spdlog::info("Dumping metadata for {}", module.m_pszModule);
 
-	typedef void* (*ExtractModuleMetadata)(SimpleCUtlString& str);
-	auto extractModuleMetadataFn = module.GetSymbol<ExtractModuleMetadata>("ExtractModuleMetadata");
+	auto extractModuleMetadataFn = TryGetExtractModuleMetadata(module);
+	if (!extractModuleMetadataFn)
+	{
+		spdlog::warn("{} has no ExtractModuleMetadata export ({})", module.m_pszModule, dlerror());
+		return false;
+	}
 
 	SimpleCUtlString additional_info;
-	auto kv3 = extractModuleMetadataFn(additional_info);
+	void* kv3 = nullptr;
+	try
+	{
+		kv3 = extractModuleMetadataFn(additional_info);
+	}
+	catch (...)
+	{
+		spdlog::error("{} ExtractModuleMetadata threw an exception", module.m_pszModule);
+		return false;
+	}
 
-	typedef int (*SaveKV3Text_ToString)(KV3ID_t const&, void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
-#ifdef WIN32
-	static auto saveKV3Text_ToStringFn = Modules::tier0->GetSymbol<SaveKV3Text_ToString>("?SaveKV3Text_ToString@@YA_NAEBUKV3ID_t@@PEBVKeyValues3@@PEAVCUtlString@@2I@Z");
-#else
-	static auto saveKV3Text_ToStringFn = Modules::tier0->GetSymbol<SaveKV3Text_ToString>("_Z20SaveKV3Text_ToStringRK7KV3ID_tPK10KeyValues3P10CUtlStringS6_j");
-#endif
+	if (!kv3)
+	{
+		spdlog::warn("{} ExtractModuleMetadata returned null", module.m_pszModule);
+		return false;
+	}
 
-	saveKV3Text_ToStringFn(g_KV3Encoding_Text, kv3, err, buf);
+	static auto saveKV3Text_ToStringFn = GetSaveKV3TextToString();
+	if (!saveKV3Text_ToStringFn)
+	{
+		spdlog::error("SaveKV3Text_ToString not found in tier0");
+		return false;
+	}
+
+	const auto saved = saveKV3Text_ToStringFn(g_KV3Encoding_Text, kv3, err, buf);
+	if (!saved)
+	{
+		if (err.Get())
+			spdlog::warn("{} SaveKV3Text_ToString failed: {}", module.m_pszModule, err.Get());
+		else
+			spdlog::warn("{} SaveKV3Text_ToString failed", module.m_pszModule);
+		return false;
+	}
+
+	if (!buf.Get() || !buf.Get()[0])
+	{
+		spdlog::warn("{} produced empty module metadata buffer", module.m_pszModule);
+		return false;
+	}
+
+	spdlog::info("{} metadata: {} bytes", module.m_pszModule, std::strlen(buf.Get()));
 
 	if (additional_info.Get())
 		spdlog::warn("{} has additional_info {}", module.m_pszModule, additional_info.Get());
+
+	return true;
 }
 
 void Dump()
 {
-	spdlog::info("Dumping module metadata");
+	spdlog::info("Dumping module metadata ({} loaded module(s))", Modules::allModules.size());
 	std::unordered_set<std::string> foundModules;
 	const auto outputPath = Globals::outputPath / "module_metadata";
 
 	for (const auto& module : Modules::allModules)
 	{
 		SimpleCUtlString err, buf;
-		GetModuleMetadata(module, err, buf);
+		if (!GetModuleMetadata(module, err, buf))
+			continue;
 
-		if (buf.Get())
+		auto sanitizedModuleName = std::string(module.m_pszModule);
+		std::replace(sanitizedModuleName.begin(), sanitizedModuleName.end(), '/', '_');
+		foundModules.insert(sanitizedModuleName);
+
+		if (!std::filesystem::is_directory(outputPath) && !std::filesystem::create_directories(outputPath))
 		{
-			auto sanitizedModuleName = std::string(module.m_pszModule);
-			std::replace(sanitizedModuleName.begin(), sanitizedModuleName.end(), '/', '_');
-			foundModules.insert(sanitizedModuleName);
-
-
-			if (!std::filesystem::is_directory(outputPath) && !std::filesystem::create_directory(outputPath))
-			{
-				spdlog::error("Failed to create module_metadata directory");
-				return;
-			}
-
-			std::ofstream output((outputPath / sanitizedModuleName).replace_extension(".kv3"));
-			output << buf.Get() << std::endl;
+			spdlog::error("Failed to create module_metadata directory");
+			return;
 		}
+
+		std::ofstream output((outputPath / sanitizedModuleName).replace_extension(".kv3"));
+		output << buf.Get() << std::endl;
 	}
 
-	for (const auto& typeScopePath : std::filesystem::directory_iterator(outputPath))
+	if (std::filesystem::exists(outputPath))
 	{
-		if (foundModules.find(typeScopePath.path().stem().string()) == foundModules.end())
+		for (const auto& typeScopePath : std::filesystem::directory_iterator(outputPath))
 		{
-			spdlog::info("Removing orphan metadata file {}", typeScopePath.path().generic_string());
-			std::filesystem::remove(typeScopePath.path());
+			if (foundModules.find(typeScopePath.path().stem().string()) == foundModules.end())
+			{
+				spdlog::info("Removing orphan metadata file {}", typeScopePath.path().generic_string());
+				std::filesystem::remove(typeScopePath.path());
+			}
 		}
 	}
+
+	spdlog::info("Module metadata dump complete: {} kv3 file(s)", foundModules.size());
 }
 
 } // namespace Dumpers::ModuleMetadata

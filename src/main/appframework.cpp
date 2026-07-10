@@ -185,5 +185,6 @@ void InitializeAppSystems()
 		}
 
 		Modules::allModules.emplace_back(std::move(module));
+	spdlog::debug("Registered module for metadata dump: {} (total {})", appSystem.moduleName, Modules::allModules.size());
 	}
 }
