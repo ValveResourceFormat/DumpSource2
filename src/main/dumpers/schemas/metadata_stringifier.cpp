@@ -57,7 +57,9 @@ std::unordered_set<std::string> g_classWithBrokenDefaults = {
 	"CSkeletonInstance",
 	"CGameSceneNode",
 	"CBodyComponentBaseAnimGraph",
-	"CBodyComponentSkeletonInstance"
+	"CBodyComponentSkeletonInstance",
+	"dynpitchvol_base_t",
+	"dynpitchvol_t"
 };
 
 std::vector<std::regex> g_regexFilters = {
