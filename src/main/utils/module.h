@@ -106,7 +106,7 @@ public:
 		InitializeSections();
 #else
 		if (int e = GetModuleInformation(m_hModule, &m_base, &m_size, m_sections))
-			ExitError("Failed to get module info for %s, error %d", szModule, e);
+			ExitError("Failed to get module info for %s, error %d", szModule.c_str(), e);
 #endif
 
 		spdlog::trace("Initialized module {} base: {:p}, size: {:x}", m_pszModule, m_base, m_size);

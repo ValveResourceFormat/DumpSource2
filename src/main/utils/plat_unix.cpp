@@ -77,7 +77,7 @@ int GetModuleInformation(HINSTANCE hModule, void** base, size_t* length, std::ve
 			ElfW(Shdr)* shdrs = reinterpret_cast<ElfW(Shdr)*>(reinterpret_cast<uintptr_t>(ehdr) + ehdr->e_shoff);
 			const char* strTab = reinterpret_cast<const char*>(reinterpret_cast<uintptr_t>(ehdr) + shdrs[ehdr->e_shstrndx].sh_offset);
 	
-			for (auto i = 0; i < ehdr->e_phnum; ++i)
+			for (size_t i = 0; i < ehdr->e_phnum; ++i)
 			{
 				ElfW(Phdr)* phdr = reinterpret_cast<ElfW(Phdr)*>(reinterpret_cast<uintptr_t>(ehdr) + ehdr->e_phoff + i * ehdr->e_phentsize);
 				if (phdr->p_type == PT_LOAD && phdr->p_flags & PF_X)
@@ -88,7 +88,7 @@ int GetModuleInformation(HINSTANCE hModule, void** base, size_t* length, std::ve
 				}
 			}
 
-			for (auto i = 0; i < ehdr->e_shnum; ++i)
+			for (size_t i = 0; i < ehdr->e_shnum; ++i)
 			{
 				ElfW(Shdr)* shdr = reinterpret_cast<ElfW(Shdr)*>(reinterpret_cast<uintptr_t>(shdrs) + i * ehdr->e_shentsize);
 				if (*(strTab + shdr->sh_name) == '\0')
