@@ -1,8 +1,8 @@
 # DumpSource2
 
-A C++ Application that offline dumps schema bindings and convars/commands for [GameTracking](https://github.com/SteamDatabase/GameTracking) purposes.
+A C++ Application that offline dumps schema bindings and convars/commands for [GameTracking](https://github.com/SteamTracking/GameTracking) purposes.
 
-[See this file in GameTracking on how its used.](https://github.com/SteamDatabase/GameTracking/blob/master/tools/dump_source2.sh)
+[See this file in GameTracking on how its used.](https://github.com/SteamTracking/GameTracking/blob/master/tools/dump_source2.sh)
 
 ## Usage
 
