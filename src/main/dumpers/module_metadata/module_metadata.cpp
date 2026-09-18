@@ -81,6 +81,9 @@ void Dump()
 		}
 	}
 
+	if (!std::filesystem::is_directory(outputPath))
+		return;
+
 	for (const auto& typeScopePath : std::filesystem::directory_iterator(outputPath))
 	{
 		if (foundModules.find(typeScopePath.path().stem().string()) == foundModules.end())
