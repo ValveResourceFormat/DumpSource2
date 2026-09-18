@@ -71,6 +71,8 @@ std::vector<std::regex> g_regexFilters = {
 	std::regex(R"#(("m_stateID":) .*)#"),
 	std::regex(R"#(("m_pinID":) .*)#"),
 	std::regex(R"#(("m_entryStateID":) .*)#"),
+	std::regex(R"#(("pitchfrac":) .*)#"),
+	std::regex(R"#(("vol":) .*)#"),
 };
 
 // Any function called after this will have uninitialized variables set to zero
