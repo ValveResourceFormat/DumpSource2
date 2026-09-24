@@ -72,6 +72,6 @@ struct IntermediateSchemaEnum
 	std::vector<IntermediateSchemaEnumMember> members;
 };
 
-void Dump();
+bool Dump();
 
 } // namespace Dumpers::Schemas

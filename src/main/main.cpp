@@ -97,7 +97,12 @@ int main(int argc, char** argv)
 
 	if (InitializeSchemas())
 	{
-		Dumpers::Schemas::Dump();
+		if (!Dumpers::Schemas::Dump())
+		{
+			spdlog::critical("Not writing schemas, see above");
+			exitCode = 1;
+		}
+
 		Dumpers::ModuleMetadata::Dump();
 		WriteStringsIgnore();
 	}

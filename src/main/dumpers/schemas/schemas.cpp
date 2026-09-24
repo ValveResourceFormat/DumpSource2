@@ -19,6 +19,7 @@
 
 #include "schemas.h"
 #include "interfaces.h"
+#include "modules.h"
 #include <algorithm>
 #include <optional>
 #include <tuple>
@@ -33,7 +34,76 @@
 namespace Dumpers::Schemas
 {
 
-void DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchemaClass>& classes)
+// Schemas are read through the SDK structs, which can be outdated while everything still loads.
+// Class and enum infos are static data in the module that declares them, so check the pointers before reading.
+// These return what is invalid, or null.
+static const char* ValidateMetadata(const SchemaMetadataEntryData_t* metadata, int count)
+{
+	if (count > 0 && !Modules::FindModuleContaining(metadata))
+		return "metadata pointer";
+
+	for (int i = 0; i < count; i++)
+	{
+		if (!Modules::IsValidName(metadata[i].m_pszName))
+			return "metadata name";
+	}
+
+	return nullptr;
+}
+
+static const char* ValidateClass(const SchemaClassInfoData_t* classInfo)
+{
+	if (!Modules::FindModuleContaining(classInfo))
+		return "class info pointer";
+	if (!Modules::IsValidName(classInfo->m_pszName) || !Modules::IsValidName(classInfo->m_pszProjectName))
+		return "class name";
+	if (auto invalid = ValidateMetadata(classInfo->m_pStaticMetadata, classInfo->m_nStaticMetadataCount))
+		return invalid;
+	if (classInfo->m_nBaseClassCount > 0 && !Modules::FindModuleContaining(classInfo->m_pBaseClasses))
+		return "base classes pointer";
+	if (classInfo->m_nFieldCount > 0 && !Modules::FindModuleContaining(classInfo->m_pFields))
+		return "fields pointer";
+
+	for (uint16_t i = 0; i < classInfo->m_nFieldCount; i++)
+	{
+		const auto& field = classInfo->m_pFields[i];
+
+		if (!Modules::IsValidName(field.m_pszName))
+			return "field name";
+		if (field.m_nSingleInheritanceOffset < 0 || field.m_nSingleInheritanceOffset > classInfo->m_nSize)
+			return "field offset";
+		if (auto invalid = ValidateMetadata(field.m_pStaticMetadata, field.m_nStaticMetadataCount))
+			return invalid;
+	}
+
+	return nullptr;
+}
+
+static const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
+{
+	if (!Modules::FindModuleContaining(enumInfo))
+		return "enum info pointer";
+	if (!Modules::IsValidName(enumInfo->m_pszName) || !Modules::IsValidName(enumInfo->m_pszProjectName))
+		return "enum name";
+	if (auto invalid = ValidateMetadata(enumInfo->m_pStaticMetadata, enumInfo->m_nStaticMetadataCount))
+		return invalid;
+	if (enumInfo->m_nEnumeratorCount > 0 && !Modules::FindModuleContaining(enumInfo->m_pEnumerators))
+		return "enumerators pointer";
+
+	for (uint16_t i = 0; i < enumInfo->m_nEnumeratorCount; i++)
+	{
+		const auto& enumerator = enumInfo->m_pEnumerators[i];
+
+		if (!Modules::IsValidName(enumerator.m_pszName))
+			return "enumerator name";
+		if (auto invalid = ValidateMetadata(enumerator.m_pStaticMetadata, enumerator.m_nStaticMetadataCount))
+			return invalid;
+	}
+
+	return nullptr;
+}
+
+static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchemaClass>& classes)
 {
 	FOR_EACH_MAP(typeScope->m_DeclaredClasses.m_Map, iter)
 	{
@@ -41,6 +111,12 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSche
 
 		if (!classInfo)
 			continue;
+
+		if (auto invalid = ValidateClass(classInfo))
+		{
+			spdlog::critical("Schema class in {} has an invalid {}, SchemaClassInfoData_t in the SDK needs updating", typeScope->m_szScopeName, invalid);
+			return false;
+		}
 
 		IntermediateSchemaClass schemaClass{
 			.name = std::string(classInfo->m_pszName),
@@ -96,13 +172,21 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSche
 
 		classes.push_back(std::move(schemaClass));
 	}
+
+	return true;
 }
 
-void DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchemaEnum>& enums)
+static bool DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchemaEnum>& enums)
 {
 	FOR_EACH_MAP(typeScope->m_DeclaredEnums.m_Map, iter)
 	{
 		const auto enumInfo = typeScope->m_DeclaredEnums.m_Map.Element(iter)->m_pEnumInfo;
+
+		if (auto invalid = ValidateEnum(enumInfo))
+		{
+			spdlog::critical("Schema enum in {} has an invalid {}, SchemaEnumInfoData_t in the SDK needs updating", typeScope->m_szScopeName, invalid);
+			return false;
+		}
 
 		std::optional<std::string> alignment;
 
@@ -156,26 +240,30 @@ void DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchema
 
 		enums.push_back(std::move(schemaEnum));
 	}
+
+	return true;
 }
 
-void DumpTypeScope(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchemaEnum>& enums, std::vector<IntermediateSchemaClass>& classes)
+static bool DumpTypeScope(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchemaEnum>& enums, std::vector<IntermediateSchemaClass>& classes)
 {
-	DumpClasses(typeScope, classes);
-	DumpEnums(typeScope, enums);
+	return DumpClasses(typeScope, classes) && DumpEnums(typeScope, enums);
 }
 
-void Dump()
+// Returns false if the schemas could not be read, which are then not written to keep the previous dump
+bool Dump()
 {
 	auto schemaSystem = Interfaces::schemaSystem;
 
 	const auto& typeScopes = schemaSystem->m_TypeScopes;
 	std::vector<IntermediateSchemaEnum> enums;
 	std::vector<IntermediateSchemaClass> classes;
+	bool valid = true;
 
-	for (auto i = 0; i < typeScopes.m_Vector.Count(); ++i)
-		DumpTypeScope(typeScopes[i], enums, classes);
+	for (auto i = 0; valid && i < typeScopes.m_Vector.Count(); ++i)
+		valid = DumpTypeScope(typeScopes[i], enums, classes);
 
-	DumpTypeScope(schemaSystem->GlobalTypeScope(), enums, classes);
+	if (!valid || !DumpTypeScope(schemaSystem->GlobalTypeScope(), enums, classes))
+		return false;
 
 	// Schema system order depends on registration order, sort so the output is stable between runs
 	auto byModuleAndName = [](const auto& a, const auto& b) { return std::tie(a.module, a.name) < std::tie(b.module, b.name); };
@@ -184,6 +272,7 @@ void Dump()
 
 	FilesystemExporter::Dump(enums, classes);
 	JsonExporter::Dump(enums, classes);
+	return true;
 }
 
 } // namespace Dumpers::Schemas
