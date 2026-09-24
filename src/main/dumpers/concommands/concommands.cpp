@@ -27,6 +27,9 @@
 #include "concommands.h"
 #include "globalvariables.h"
 #include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <set>
 #include <charconv>
 #include <iterator>
 #include <fstream>
@@ -37,6 +40,7 @@
 #include <unordered_set>
 #include "gamedata.h"
 #include "modules.h"
+#include <fmt/ranges.h>
 #include <spdlog/spdlog.h>
 
 namespace Dumpers::ConCommands
@@ -81,15 +85,14 @@ std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ 1ull << 34, "gameinfo_cannot_override" },
 };
 
-void WriteFlags(uint64_t flags, std::ostream& stream)
+std::vector<std::string> GetFlagNames(uint64_t flags)
 {
-	bool found = false;
+	std::vector<std::string> names;
 	for (const auto& [value, name] : g_flagMap)
 	{
 		if (flags & value)
 		{
-			stream << (found ? " " : "") << name;
-			found = true;
+			names.push_back(name);
 			flags &= ~value;
 		}
 	}
@@ -98,11 +101,10 @@ void WriteFlags(uint64_t flags, std::ostream& stream)
 	for (int bit = 0; bit < 64; bit++)
 	{
 		if (flags & (1ull << bit))
-		{
-			stream << (found ? " " : "") << "flag_" << bit;
-			found = true;
-		}
+			names.push_back(fmt::format("flag_{}", bit));
 	}
+
+	return names;
 }
 
 // Floats are written as the shortest text that reads back as the same value, like 100.1 or 1000000 rather than 1e+06,
@@ -136,7 +138,7 @@ static std::string FormatNumber(T value)
 
 // Writes a numeric value with its min and max, the member selects which CVValue_t union member to print
 template <typename T>
-static void WriteMinMaxValue(T CVValue_t::* member, uint64_t flags, const CVValue_t* value, const CVValue_t* minValue, const CVValue_t* maxValue, std::ostream& stream)
+static void WriteMinMaxValue(T CVValue_t::* member, const std::string& flags, const CVValue_t* value, const CVValue_t* minValue, const CVValue_t* maxValue, std::ostream& stream)
 {
 	stream << " " << FormatNumber(value->*member) << " (";
 
@@ -153,18 +155,18 @@ static void WriteMinMaxValue(T CVValue_t::* member, uint64_t flags, const CVValu
 	if (minValue || maxValue)
 		stream << ", ";
 
-	WriteFlags(flags, stream);
+	stream << flags;
 	stream << ")";
 }
 
-void WriteValueLine(EConVarType type, uint64_t flags, const CVValue_t* value, const CVValue_t* minValue, const CVValue_t* maxValue, std::ostream& stream)
+void WriteValueLine(EConVarType type, const std::string& flags, const CVValue_t* value, const CVValue_t* minValue, const CVValue_t* maxValue, std::ostream& stream)
 {
 	switch (type)
 	{
 		case EConVarType_Bool:
 		{
 			stream << " " << (value->m_bValue ? "true" : "false") << " (";
-			WriteFlags(flags, stream);
+			stream << flags;
 			stream << ")";
 			break;
 		}
@@ -192,42 +194,42 @@ void WriteValueLine(EConVarType type, uint64_t flags, const CVValue_t* value, co
 		case EConVarType_String:
 		{
 			stream << " \"" << (value->m_StringValue.m_pString ? value->m_StringValue.m_pString : "") << "\"" << " (";
-			WriteFlags(flags, stream);
+			stream << flags;
 			stream << ")";
 			break;
 		}
 		case EConVarType_Color:
 		{
 			stream << " [" << value->m_clrValue.r() << ", " << value->m_clrValue.g() << ", " << value->m_clrValue.b() << ", " << value->m_clrValue.a() << "]" << " (";
-			WriteFlags(flags, stream);
+			stream << flags;
 			stream << ")";
 			break;
 		}
 		case EConVarType_Vector2:
 		{
 			stream << " [" << FormatFloat(value->m_vec2Value.x) << ", " << FormatFloat(value->m_vec2Value.y) << "]" << " (";
-			WriteFlags(flags, stream);
+			stream << flags;
 			stream << ")";
 			break;
 		}
 		case EConVarType_Vector3:
 		{
 			stream << " [" << FormatFloat(value->m_vec3Value.x) << ", " << FormatFloat(value->m_vec3Value.y) << ", " << FormatFloat(value->m_vec3Value.z) << "]" << " (";
-			WriteFlags(flags, stream);
+			stream << flags;
 			stream << ")";
 			break;
 		}
 		case EConVarType_Vector4:
 		{
 			stream << " [" << FormatFloat(value->m_vec4Value.x) << ", " << FormatFloat(value->m_vec4Value.y) << ", " << FormatFloat(value->m_vec4Value.z) << ", " << FormatFloat(value->m_vec4Value.w) << "]" << " (";
-			WriteFlags(flags, stream);
+			stream << flags;
 			stream << ")";
 			break;
 		}
 		case EConVarType_Qangle:
 		{
 			stream << " [" << FormatFloat(value->m_angValue.x) << ", " << FormatFloat(value->m_angValue.y) << ", " << FormatFloat(value->m_angValue.z) << "]" << " (";
-			WriteFlags(flags, stream);
+			stream << flags;
 			stream << ")";
 			break;
 		}
@@ -518,7 +520,41 @@ static QueuedEntry_t MergeQueued(const std::vector<QueuedEntry_t*>& entries)
 	return *merged;
 }
 
-static void WriteQueued(Queue_t& queue, bool isConVar)
+// Names in the workshop whitelist, lowercase since the engine looks them up case-insensitively.
+// Returns false if the file exists but has no names, which means its format changed.
+static bool LoadWorkshopWhitelist(std::set<std::string>& names)
+{
+	const auto path = std::filesystem::current_path() / "../.." / GAME_PATH / g_WorkshopWhitelistPath;
+	std::ifstream file(path);
+	if (!file)
+	{
+		spdlog::info("No workshop whitelist at {}, not flagging whitelisted convars and commands", path.lexically_normal().generic_string());
+		return true;
+	}
+
+	const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	const auto start = text.find('[', text.find("whitelist_cvars"));
+	const auto end = text.find(']', start);
+
+	for (auto quote = text.find('"', start); quote < end; quote = text.find('"', quote + 1))
+	{
+		const auto close = text.find('"', quote + 1);
+		auto name = text.substr(quote + 1, close - quote - 1);
+		std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
+		names.insert(name);
+		quote = close;
+	}
+
+	if (names.empty())
+	{
+		spdlog::critical("Workshop whitelist at {} has no whitelist_cvars names, its format changed", path.lexically_normal().generic_string());
+		return false;
+	}
+
+	return true;
+}
+
+static void WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& whitelist)
 {
 	std::map<std::string, std::vector<QueuedEntry_t*>> byName;
 	for (auto& entry : queue.m_Entries)
@@ -533,18 +569,26 @@ static void WriteQueued(Queue_t& queue, bool isConVar)
 		auto entry = MergeQueued(entries);
 		output << name;
 
+		auto flagNames = GetFlagNames(entry.m_nFlags);
+
+		// Found names are removed, so the ones left over can be reported
+		auto lowerName = name;
+		std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), [](unsigned char c) { return std::tolower(c); });
+		if (whitelist.erase(lowerName))
+			flagNames.push_back("workshop_whitelisted");
+
+		auto flags = fmt::format("{}", fmt::join(flagNames, " "));
+
 		if (isConVar)
 		{
 			// cl_color has a random default value on each start.
 			alignas(CVValue_t) static const uint8 empty[sizeof(CVValue_t)] = {};
 			auto value = entry.m_Default.m_bSet && name != "cl_color" ? entry.m_Default.Get() : (const CVValue_t*)empty;
-			WriteValueLine(entry.m_eType, entry.m_nFlags, value, entry.m_Min.Get(), entry.m_Max.Get(), output);
+			WriteValueLine(entry.m_eType, flags, value, entry.m_Min.Get(), entry.m_Max.Get(), output);
 		}
 		else
 		{
-			output << " (";
-			WriteFlags(entry.m_nFlags, output);
-			output << ")";
+			output << " (" << flags << ")";
 		}
 
 		WriteHelp(name.c_str(), entry.m_Help.c_str(), output);
@@ -554,15 +598,22 @@ static void WriteQueued(Queue_t& queue, bool isConVar)
 // Returns false if either could not be dumped, which is then not written to keep the previous dump
 bool Dump()
 {
+	std::set<std::string> whitelist;
+	const bool whitelistLoaded = LoadWorkshopWhitelist(whitelist);
+
 	for (auto queue : { &g_ConVarQueue, &g_ConCommandQueue })
 	{
 		if (queue->m_bFailed)
 			spdlog::critical("Not writing {} because the {} queue signature failed, see above", queue->m_pszFileName, queue->m_pszKind);
 		else
-			WriteQueued(*queue, queue == &g_ConVarQueue);
+			WriteQueued(*queue, queue == &g_ConVarQueue, whitelist);
 	}
 
-	return !g_ConVarQueue.m_bFailed && !g_ConCommandQueue.m_bFailed;
+	// Like button commands, which are registered at runtime, or names the game no longer has
+	if (!whitelist.empty())
+		spdlog::info("{} workshop whitelisted names are not convars or commands: {}", whitelist.size(), fmt::join(whitelist, ", "));
+
+	return whitelistLoaded && !g_ConVarQueue.m_bFailed && !g_ConCommandQueue.m_bFailed;
 }
 
 } // namespace Dumpers::ConCommands

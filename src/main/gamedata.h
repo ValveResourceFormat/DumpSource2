@@ -192,6 +192,10 @@ inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\x
 // Modules that always declare both, not finding their queues means the signatures are outdated
 inline const std::unordered_set<std::string> g_RequiredQueueModules = { "tier0", "engine2", "client", "server" };
 
+// Convars and commands that workshop maps can use, in the game directory as GameTracking extracts it from pak01_dir.vpk.
+// Only CS2 has it. It's KV3 text with the names in a whitelist_cvars array.
+inline constexpr const char* g_WorkshopWhitelistPath = "pak01_dir/scripts/workshop_cvar_whitelist.txt";
+
 //-----------------------------------------------------------------------------
 // Entities
 //-----------------------------------------------------------------------------
