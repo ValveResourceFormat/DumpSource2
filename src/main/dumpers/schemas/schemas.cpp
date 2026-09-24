@@ -135,7 +135,7 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 		for (uint16_t k = 0; k < classInfo->m_nStaticMetadataCount; k++)
 		{
 			const auto& metadataEntry = classInfo->m_pStaticMetadata[k];
-			schemaClass.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, classInfo->m_pszName), HasMetadataValue(metadataEntry));
+			schemaClass.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName));
 		}
 
 		if (classInfo->m_nBaseClassCount > 0)
@@ -164,7 +164,7 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 			for (uint16_t l = 0; l < field.m_nStaticMetadataCount; l++)
 			{
 				const auto& metadataEntry = field.m_pStaticMetadata[l];
-				intermediateField.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, classInfo->m_pszName), HasMetadataValue(metadataEntry));
+				intermediateField.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName));
 			}
 
 			schemaClass.fields.push_back(std::move(intermediateField));
@@ -217,7 +217,7 @@ static bool DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<Intermediat
 		for (uint16_t k = 0; k < enumInfo->m_nStaticMetadataCount; k++)
 		{
 			const auto& metadataEntry = enumInfo->m_pStaticMetadata[k];
-			schemaEnum.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, enumInfo->m_pszName), HasMetadataValue(metadataEntry));
+			schemaEnum.metadata.push_back(GetMetadata(metadataEntry, enumInfo->m_pszName));
 		}
 
 		for (uint16_t k = 0; k < enumInfo->m_nEnumeratorCount; k++)
@@ -232,7 +232,7 @@ static bool DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<Intermediat
 			for (uint16_t l = 0; l < field.m_nStaticMetadataCount; l++)
 			{
 				const auto& metadataEntry = field.m_pStaticMetadata[l];
-				member.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, enumInfo->m_pszName), HasMetadataValue(metadataEntry));
+				member.metadata.push_back(GetMetadata(metadataEntry, enumInfo->m_pszName));
 			}
 
 			schemaEnum.members.push_back(std::move(member));
@@ -273,6 +273,9 @@ bool Dump()
 		if (!DumpTypeScope(typeScope, enums, classes))
 			return false;
 	}
+
+	if (g_bInvalidKV3Defaults)
+		return false;
 
 	// Schema system order depends on registration order, sort so the output is stable between runs
 	auto byModuleAndName = [](const auto& a, const auto& b) { return std::tie(a.module, a.name) < std::tie(b.module, b.name); };

@@ -21,9 +21,9 @@
  */
 #pragma once
 #include <map>
-#include <optional>
 #include <string>
 #include <schemasystem/schematypes.h>
+#include "schemas.h"
 
 struct CSchemaVarName
 {
@@ -45,7 +45,9 @@ namespace Dumpers::Schemas
 // First value of each metadata missing from metadatalist.h, described to help pick its type
 extern std::map<std::string, std::string> g_unknownMetadataSamples;
 
-bool HasMetadataValue(const SchemaMetadataEntryData_t& entry);
-std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName);
+// Set when any KV3 defaults could not be parsed, which means the schemas should not be written
+extern bool g_bInvalidKV3Defaults;
+
+IntermediateMetadata GetMetadata(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName);
 
 } // namespace Dumpers::Schemas

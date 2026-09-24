@@ -20,6 +20,7 @@
 #include <string>
 #include <vector>
 #include <optional>
+#include <nlohmann/json.hpp>
 #include "schemasystem/schematypes.h"
 
 class CSchemaSystemTypeScope;
@@ -32,6 +33,7 @@ struct IntermediateMetadata
 	std::string name;
 	std::optional<std::string> stringValue;
 	bool hasValue;
+	std::optional<nlohmann::json> jsonValue; // Replaces stringValue in schemas.json, KV3 defaults as an object
 };
 
 struct IntermediateSchemaClassParent

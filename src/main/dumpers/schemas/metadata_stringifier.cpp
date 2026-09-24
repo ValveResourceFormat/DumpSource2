@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <map>
+#include <unordered_map>
 #include <unordered_set>
 #include "metadatalist.h"
 #include <optional>
@@ -33,7 +34,9 @@
 #include "metadata_stringifier.h"
 #include <modules.h>
 #include <vector>
-#include <regex>
+#include <string_view>
+#include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 #include "utils/common.h"
 
 #ifndef WIN32
@@ -44,8 +47,8 @@
 namespace Dumpers::Schemas
 {
 
+// Their constructors crash, they need a running game (owning entity, game systems)
 std::unordered_set<std::string> g_classWithBrokenDefaults = {
-	// Crash, their constructors need a running game (owning entity, game systems)
 	"C_fogplayerparams_t",
 	"fogplayerparams_t",
 	"CBodyComponentBaseAnimating",
@@ -55,32 +58,45 @@ std::unordered_set<std::string> g_classWithBrokenDefaults = {
 	"CCitadelPlayerPawn_GraphController2",
 	"CGameSceneNode",
 	"CSkeletonInstance",
-
-	// Different output between runs
-	"CAnimAttachment",
-	"CAnimGraphDoc_GroupNode",
-	"CBlockSelectionMetricEvaluator",
-	"CastSphereSATParams_t",
-	"FourCovMatrices3",
-	"HitReactFixedSettings_t",
-	"RTProxyBLAS_t",
-	"vphysics_save_ragdoll_control_t",
 };
 
-// Fields that constructors fill with random values or leave partially uninitialized
-std::vector<std::regex> g_regexFilters = {
-	std::regex(R"#(("m_id":) .*)#"),
-	std::regex(R"#(("m_ID":) .*,)#"),
-	std::regex(R"#(("m_nRandomSeed":) .*,)#"),
-	std::regex(R"#(("m_seed":) .*,)#"),
-	std::regex(R"#(("m_outputPinID":) .*,)#"),
-	std::regex(R"#(("m_stateID":) .*)#"),
-	std::regex(R"#(("m_pinID":) .*)#"),
-	std::regex(R"#(("m_entryStateID":) .*)#"),
-	std::regex(R"#(("pitchfrac":) .*)#"),
-	std::regex(R"#(("vol":) .*)#"),
-	std::regex(R"#(("m_cloneStateVersion":) .*)#"),
+// Keys that constructors fill with random values or leave uninitialized, so their values are zeroed at any depth.
+// These are in, or embedded in, many classes, so they are zeroed in all of them.
+std::unordered_set<std::string> g_hiddenDefaultKeys = {
+	"m_id",
+	"m_ID",
+	"m_influenceOffsets", // CAnimAttachment
+	"m_nRandomSeed",
 };
+
+// The same, but only zeroed in these classes. Classes that embed another one with the key are listed too.
+std::unordered_map<std::string, std::unordered_set<std::string>> g_hiddenClassDefaultKeys = {
+	{ "CAnimGraphDoc_ChoiceNode", { "m_seed" } },
+	{ "CAnimGraphDoc_ComponentState", { "m_stateID" } },
+	{ "CAnimGraphDoc_GroupNode", { "m_nodes" } }, // Input and output nodes in random order
+	{ "CAnimGraphDoc_NodeState", { "m_stateID" } },
+	{ "CAnimGraphDoc_State", { "m_stateID" } },
+	{ "CBlockSelectionMetricEvaluator", { "m_means", "m_standardDeviations" } },
+	{ "CNmBlendSpace1D::Point_t", { "m_pinID" } },
+	{ "CNmGraphDocBlend1DNode", { "m_pinID" } },
+	{ "CNmGraphDocEntryOverrideNode", { "m_stateID" } },
+	{ "CNmGraphDocFlowGraph::Connection_t", { "m_outputPinID" } },
+	{ "CNmGraphDocGlobalTransitionNode", { "m_stateID" } },
+	{ "CNmGraphDocStateMachineGraph", { "m_entryStateID" } },
+	{ "CNmGraphDocStateMachineNode", { "m_stateID", "m_entryStateID", "m_cloneStateVersion" } },
+	{ "CNmGraphDocStateNode", { "m_cloneStateVersion" } },
+	{ "CStateUpdateData", { "m_stateID" } },
+	{ "CTestPulseIO::EntityHandleIntArgs_t", { "valueB" } },
+	{ "FourCovMatrices3", { "m_flXY" } },
+	{ "HitReactFixedSettings_t", { "m_flWhipSpringStrength" } },
+	{ "RTProxyBLAS_t", { "m_vMaxBounds" } },
+	{ "VMixPointerFixupEntry_t", { "m_nIndex" } },
+	{ "dynpitchvol_base_t", { "pitchfrac", "vol" } },
+	{ "dynpitchvol_t", { "pitchfrac", "vol" } },
+	{ "vphysics_save_ragdoll_control_t", { "m_vLinearVelocityAccumulator" } },
+};
+
+bool g_bInvalidKV3Defaults = false;
 
 typedef void* (*GetKV3DefaultsFn)();
 
@@ -143,6 +159,135 @@ static void* CallKV3Defaults(GetKV3DefaultsFn fn)
 }
 #endif
 
+// SaveKV3AsJSON writes NaN and infinity as bare words, which JSON has no value for, so they are quoted into strings
+static std::string QuoteNonFiniteFloats(std::string_view text)
+{
+	// In this order so -nan is not matched as nan
+	constexpr std::string_view nonFiniteFloats[] = { "-nan", "nan", "-inf", "inf" };
+
+	std::string result;
+	bool inString = false;
+
+	for (size_t i = 0; i < text.size(); i++)
+	{
+		if (inString)
+		{
+			if (text[i] == '\\')
+				result += text[i++];
+			else if (text[i] == '"')
+				inString = false;
+		}
+		else if (text[i] == '"')
+		{
+			inString = true;
+		}
+		else
+		{
+			// Outside strings, only numbers and true/false/null are bare, none of which contain these
+			auto nonFinite = std::find_if(std::begin(nonFiniteFloats), std::end(nonFiniteFloats), [&](std::string_view word) { return text.substr(i, word.size()) == word; });
+			if (nonFinite != std::end(nonFiniteFloats))
+			{
+				result += fmt::format("\"{}\"", *nonFinite);
+				i += nonFinite->size() - 1;
+				continue;
+			}
+		}
+
+		result += text[i];
+	}
+
+	return result;
+}
+
+// Resets hidden values to zero, keeping their type and shape
+static void ZeroHiddenDefaults(nlohmann::ordered_json& value, const std::unordered_set<std::string>& classKeys, bool hidden = false)
+{
+	if (value.is_object())
+	{
+		for (auto it = value.begin(); it != value.end(); ++it)
+			ZeroHiddenDefaults(it.value(), classKeys, hidden || g_hiddenDefaultKeys.contains(it.key()) || classKeys.contains(it.key()));
+	}
+	else if (value.is_array())
+	{
+		for (auto& item : value)
+			ZeroHiddenDefaults(item, classKeys, hidden);
+	}
+	else if (hidden)
+	{
+		if (value.is_string())
+			value = "";
+		else if (value.is_boolean())
+			value = false;
+		else if (value.is_number_float())
+			value = 0.0;
+		else if (value.is_number())
+			value = 0;
+	}
+}
+
+// Writes the defaults like SaveKV3AsJSON does: a value per line, containers on their own line and floats with 6 decimals
+static void WriteDefaults(const nlohmann::ordered_json& value, const std::string& indent, std::string& out)
+{
+	if (!value.is_structured())
+	{
+		out += value.is_number_float() ? fmt::format("{:.6f}", value.get<double>()) : value.dump();
+		return;
+	}
+
+	const auto inner = indent + "\t";
+	out += value.is_object() ? "{\n" : "[\n";
+
+	for (auto it = value.begin(); it != value.end(); ++it)
+	{
+		out += inner;
+
+		if (value.is_object())
+			out += nlohmann::json(it.key()).dump() + ":" + (it->is_structured() ? "\n" + inner : " ");
+
+		WriteDefaults(*it, inner, out);
+		out += std::next(it) != value.end() ? ",\n" : "\n";
+	}
+
+	out += indent + (value.is_object() ? "}" : "]");
+}
+
+static std::optional<std::string> GetKV3Defaults(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName, std::optional<nlohmann::json>& jsonValue)
+{
+	typedef int (*SaveKV3AsJsonFn)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
+
+	if (!(*(void**)entry.m_pData) || g_classWithBrokenDefaults.contains(metadataTargetName))
+		return "Could not parse KV3 Defaults";
+
+	static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>(GameData::g_SaveKV3AsJSONSymbol);
+
+	auto value = CallKV3Defaults(reinterpret_cast<GetKV3DefaultsFn>(*(void**)entry.m_pData));
+	SimpleCUtlString err;
+	SimpleCUtlString buf;
+
+	if (!value || !SaveKV3AsJson(*(void**)value, err, buf))
+		return "Could not parse KV3 Defaults";
+
+	auto defaults = nlohmann::ordered_json::parse(QuoteNonFiniteFloats(buf.Get()), nullptr, false);
+
+	if (defaults.is_discarded())
+	{
+		spdlog::critical("KV3 defaults of {} are not valid JSON, the SaveKV3AsJSON output format changed", metadataTargetName);
+		g_bInvalidKV3Defaults = true;
+		return {};
+	}
+
+	static const std::unordered_set<std::string> noClassKeys;
+	auto classKeys = g_hiddenClassDefaultKeys.find(metadataTargetName);
+	const auto& hiddenClassKeys = classKeys != g_hiddenClassDefaultKeys.end() ? classKeys->second : noClassKeys;
+
+	ZeroHiddenDefaults(defaults, hiddenClassKeys);
+	jsonValue = defaults;
+
+	std::string text;
+	WriteDefaults(defaults, "", text);
+	return text;
+}
+
 std::map<std::string, std::string> g_unknownMetadataSamples;
 
 // Describes a value of metadata missing from metadatalist.h, to help pick its type when adding it
@@ -175,7 +320,7 @@ static std::string DescribeUnknownMetadata(const void* data)
 	return description;
 }
 
-bool HasMetadataValue(const SchemaMetadataEntryData_t& entry)
+static bool HasMetadataValue(const SchemaMetadataEntryData_t& entry)
 {
 	if (!entry.m_pData)
 		return false;
@@ -185,7 +330,7 @@ bool HasMetadataValue(const SchemaMetadataEntryData_t& entry)
 }
 
 // Determine how and if to output metadata entry value based on it's type.
-std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName)
+static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName, std::optional<nlohmann::json>& jsonValue)
 {
 	if (!entry.m_pData)
 		return {};
@@ -271,37 +416,7 @@ std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& ent
 			return stringStream.str();
 		}
 		case MetadataValueType::KV3DEFAULTS:
-		{
-			typedef int (*SaveKV3AsJsonFn)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
-
-			if (!(*(void**)entry.m_pData) || g_classWithBrokenDefaults.contains(metadataTargetName))
-				return "Could not parse KV3 Defaults";
-
-			auto value = CallKV3Defaults(reinterpret_cast<GetKV3DefaultsFn>(*(void**)entry.m_pData));
-
-			if (!value)
-				return "Could not parse KV3 Defaults";
-
-			static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>(GameData::g_SaveKV3AsJSONSymbol);
-
-			SimpleCUtlString err;
-			SimpleCUtlString buf;
-			int res = SaveKV3AsJson(*(void**)value, err, buf);
-
-			if (res)
-			{
-				std::string out = buf.Get();
-
-				for (const auto& regex : g_regexFilters)
-				{
-					out = std::regex_replace(out, regex, "$1 <HIDDEN FOR DIFF>,");
-				}
-
-				return out;
-			}
-
-			return "Could not parse KV3 Defaults";
-		}
+			return GetKV3Defaults(entry, metadataTargetName, jsonValue);
 		case MetadataValueType::DEBUGGER_BREAKPOINT:
 		{
 #ifdef WIN32
@@ -312,6 +427,13 @@ std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& ent
 	}
 
 	return {};
+}
+
+IntermediateMetadata GetMetadata(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName)
+{
+	IntermediateMetadata metadata{ .name = entry.m_pszName, .hasValue = HasMetadataValue(entry) };
+	metadata.stringValue = GetMetadataValue(entry, metadataTargetName, metadata.jsonValue);
+	return metadata;
 }
 
 } // namespace Dumpers::Schemas

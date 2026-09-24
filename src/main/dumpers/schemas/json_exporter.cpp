@@ -39,10 +39,10 @@ json SerializeMetadataArray(const std::vector<IntermediateMetadata>& metadataVec
 		j["name"] = metadata.name;
 		if (metadata.hasValue && metadata.stringValue.has_value())
 		{
-			j["value"] = *metadata.stringValue;
+			j["value"] = metadata.jsonValue.value_or(*metadata.stringValue);
 		}
 
-		arr.push_back(j);
+		arr.push_back(std::move(j));
 	}
 	return arr;
 }
