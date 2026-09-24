@@ -29,7 +29,6 @@
 #include <schemasystem/schemasystem.h>
 #include <algorithm>
 #include <cctype>
-#include <climits>
 #include <cstring>
 #include <filesystem>
 #include <functional>
@@ -155,9 +154,6 @@ static const std::pair<const char*, const char*> g_FieldTypeNames[] = {
 
 static_assert(std::size(g_FieldTypeNames) == (size_t)SpawnKeyType_t::FIELD_TYPECOUNT, "Field type names do not match SpawnKeyType_t in the SDK");
 
-// Procedural keyfields are handled in code and have no field
-static constexpr int g_ProceduralKeyFieldOffset = INT_MAX;
-
 static std::pair<std::string, std::string> GetFieldTypeNames(SpawnKeyType_t type)
 {
 	if ((size_t)type < std::size(g_FieldTypeNames))
@@ -237,7 +233,7 @@ static bool GetModuleEnums(const CModule& module, EnumMap& enums)
 // Returns nothing if the pattern is not understood. Returns false if the array flags don't match the pattern.
 static bool GetArrayKeyNames(const typedescription_t& field, const char* key, std::vector<std::string>& names)
 {
-	const bool isArray = field.flags & (g_FieldGenArrayKeyNames0 | g_FieldGenArrayKeyNames1);
+	const bool isArray = field.flags & (FTYPEDESC_GEN_ARRAY_KEYNAMES_0 | FTYPEDESC_GEN_ARRAY_KEYNAMES_1);
 
 	// Only %d with an optional zero padded width is used, like the game formats them
 	auto spec = strchr(key, '%');
@@ -249,13 +245,13 @@ static bool GetArrayKeyNames(const typedescription_t& field, const char* key, st
 
 	const bool isPattern = spec && *spec == 'd' && !strchr(spec, '%');
 
-	// Keys without a pattern having these flags means the flags in gamedata.h are outdated
+	// Keys without a pattern having these flags means the FTYPEDESC flags in the SDK are outdated
 	if (isArray != isPattern)
 		return !isArray;
 
 	if (isArray)
 	{
-		const int start = (field.flags & g_FieldGenArrayKeyNames1) ? 1 : 0;
+		const int start = (field.flags & FTYPEDESC_GEN_ARRAY_KEYNAMES_1) ? 1 : 0;
 		for (int i = 0; i < field.fieldSize; i++)
 			names.push_back(fmt::sprintf(key, start + i));
 	}
@@ -293,7 +289,7 @@ static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::
 		}
 
 		// Procedural keys are handled in code and have no C++ field
-		const bool isProcedural = field.fieldOffset == g_ProceduralKeyFieldOffset;
+		const bool isProcedural = field.flags & FTYPEDESC_PROCEDURAL_KEYFIELD;
 		const char* key = isProcedural ? field.fieldName : field.externalName;
 		if (!key || !key[0])
 			continue;
@@ -301,7 +297,7 @@ static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::
 		auto [typeName, fgdType] = GetFieldTypeNames(field.fieldType);
 
 		// FGDs remove keys a base class has with this type
-		if (field.flags & g_FieldRemovedKeyField)
+		if (field.flags & FTYPEDESC_REMOVED_KEYFIELD)
 			fgdType = "remove_key";
 
 		auto cppField = isProcedural ? std::string() : fmt::format(" {}", field.fieldName);
@@ -324,7 +320,7 @@ static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::
 		std::vector<std::string> arrayKeyNames;
 		if (!GetArrayKeyNames(field, key, arrayKeyNames))
 		{
-			spdlog::critical("Key {} of {} has array flags {:X} without a key name pattern, the flags in gamedata.h need updating", key, map->dataClassName, field.flags);
+			spdlog::critical("Key {} of {} has array flags {:X} without a key name pattern, the FTYPEDESC flags in the SDK need updating", key, map->dataClassName, field.flags);
 			return false;
 		}
 
