@@ -18,6 +18,7 @@
  */
 
 #include "module_metadata.h"
+#include "gamedata.h"
 #include <spdlog/spdlog.h>
 #include "modules.h"
 #include "utils/module.h"
@@ -49,11 +50,7 @@ void GetModuleMetadata(const CModule& module, SimpleCUtlString& err, SimpleCUtlS
 	}
 
 	typedef int (*SaveKV3Text_ToString)(KV3ID_t const&, void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
-#ifdef WIN32
-	static auto saveKV3Text_ToStringFn = Modules::tier0->GetSymbol<SaveKV3Text_ToString>("?SaveKV3Text_ToString@@YA_NAEBUKV3ID_t@@PEBVKeyValues3@@PEAVCUtlString@@2I@Z");
-#else
-	static auto saveKV3Text_ToStringFn = Modules::tier0->GetSymbol<SaveKV3Text_ToString>("_Z20SaveKV3Text_ToStringRK7KV3ID_tPK10KeyValues3P10CUtlStringS6_j");
-#endif
+	static auto saveKV3Text_ToStringFn = Modules::tier0->GetSymbol<SaveKV3Text_ToString>(GameData::g_SaveKV3TextToStringSymbol);
 
 	saveKV3Text_ToStringFn(g_KV3Encoding_Text, kv3, err, buf);
 

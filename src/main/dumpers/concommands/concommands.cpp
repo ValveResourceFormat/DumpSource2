@@ -28,58 +28,21 @@
 #include "concommands.h"
 #include "globalvariables.h"
 #include <algorithm>
+#include <iterator>
 #include <fstream>
 #include <vector>
 #include <iostream>
 #include <map>
 #include <optional>
 #include <unordered_set>
+#include "gamedata.h"
 #include "modules.h"
 #include <spdlog/spdlog.h>
 
 namespace Dumpers::ConCommands
 {
 
-// Convars and commands are queued by each module's statically linked tier1 until ConVar_Register is called,
-// so they can be read right after loading the module. These layouts and signatures change with game updates.
-template <typename T>
-struct CVarQueueBlock_t
-{
-	int m_nCount;
-	T m_Entries[100];
-	CVarQueueBlock_t* m_pNext;
-};
-
-struct QueuedConVar_t
-{
-	ConVarCreation_t m_Creation;
-	ConVarRef* m_pHandle;
-	ConVarData** m_ppData;
-};
-
-struct QueuedConCommand_t
-{
-	ConCommandCreation_t m_Creation;
-	ConCommandRef* m_pHandle;
-};
-
-static_assert(sizeof(CVarQueueBlock_t<QueuedConVar_t>) == 0x3E90, "Block size is part of g_ConVarQueueSignature");
-static_assert(sizeof(CVarQueueBlock_t<QueuedConCommand_t>) == 0x1910, "Block size is part of g_ConCommandQueueSignature");
-
-// Signatures of the queue append code, starting at a queue head load (its displacement is read at offset 3).
-// To update, find the block allocation (sizeof(CVarQueueBlock_t)) in tier0. The code is only linked into modules that declare any.
-#ifdef _WIN32
-//   mov reg, cs:queueHead / test reg, reg / jz / mov r8d, [reg] / cmp r8d, 64h / jnz / mov ecx, sizeof(CVarQueueBlock_t)
-static const byte g_ConVarQueueSignature[] = "\x4C\x8B\x0D\x2A\x2A\x2A\x2A\x4D\x85\xC9\x74\x2A\x45\x8B\x01\x41\x83\xF8\x64\x0F\x85\x2A\x2A\x2A\x2A\xB9\x90\x3E\x00\x00";
-static const byte g_ConCommandQueueSignature[] = "\x48\x8B\x0D\x2A\x2A\x2A\x2A\x48\x85\xC9\x74\x2A\x44\x8B\x01\x41\x83\xF8\x64\x75\x2A\xB9\x10\x19\x00\x00";
-#else
-//   mov rdx, cs:queueHead / mov dword ptr [rax], 0 / mov ecx, 1 / mov cs:queueHead, rax / mov [rax+CVarQueueBlock_t::m_pNext], rdx
-static const byte g_ConVarQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\xC7\x00\x00\x00\x00\x00\xB9\x01\x00\x00\x00\x48\x89\x05\x2A\x2A\x2A\x2A\x48\x89\x90\x88\x3E\x00\x00";
-static const byte g_ConCommandQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\xC7\x00\x00\x00\x00\x00\xB9\x01\x00\x00\x00\x48\x89\x05\x2A\x2A\x2A\x2A\x48\x89\x90\x08\x19\x00\x00";
-#endif
-
-// Modules that always declare both, not finding their queues means the signatures are outdated
-static const std::unordered_set<std::string> g_RequiredQueueModules = { "tier0", "engine2", "client", "server" };
+using namespace GameData;
 
 #define MINMAXVALUEPRINT(typeName) \
 	stream << " " << value->typeName;													\
@@ -343,9 +306,9 @@ struct Queue_t
 static Queue_t g_ConVarQueue{ "convar", "convars.txt" };
 static Queue_t g_ConCommandQueue{ "concommand", "commands.txt" };
 
-static QueuedEntry_t CopyQueued(const char* module, const QueuedConVar_t& queued)
+static QueuedEntry_t CopyQueued(const char* module, const ConVarRegList::Entry_t& queued)
 {
-	const auto& creation = queued.m_Creation;
+	const auto& creation = queued.m_Info;
 	const auto& info = creation.m_valueInfo;
 	QueuedEntry_t entry{ module, creation.m_pszName, creation.m_pszHelpString ? creation.m_pszHelpString : "", creation.m_nFlags, info.m_eVarType };
 
@@ -359,17 +322,17 @@ static QueuedEntry_t CopyQueued(const char* module, const QueuedConVar_t& queued
 	return entry;
 }
 
-static QueuedEntry_t CopyQueued(const char* module, const QueuedConCommand_t& queued)
+static QueuedEntry_t CopyQueued(const char* module, const ConCommandRegList::Entry_t& queued)
 {
-	const auto& creation = queued.m_Creation;
+	const auto& creation = queued.m_Info;
 	return { module, creation.m_pszName, creation.m_pszHelpString ? creation.m_pszHelpString : "", creation.m_nFlags };
 }
 
 // A changed queue layout can still match the signature, so check what is read from the entries before using them.
 // Returns what is invalid, or null.
-static const char* ValidateQueued(const QueuedConVar_t& queued)
+static const char* ValidateQueued(const ConVarRegList::Entry_t& queued)
 {
-	const auto& creation = queued.m_Creation;
+	const auto& creation = queued.m_Info;
 	const auto& info = creation.m_valueInfo;
 
 	if (!Modules::IsValidName(creation.m_pszName))
@@ -388,9 +351,9 @@ static const char* ValidateQueued(const QueuedConVar_t& queued)
 	return nullptr;
 }
 
-static const char* ValidateQueued(const QueuedConCommand_t& queued)
+static const char* ValidateQueued(const ConCommandRegList::Entry_t& queued)
 {
-	const auto& creation = queued.m_Creation;
+	const auto& creation = queued.m_Info;
 
 	if (!Modules::IsValidName(creation.m_pszName))
 		return "name";
@@ -400,7 +363,7 @@ static const char* ValidateQueued(const QueuedConCommand_t& queued)
 	return nullptr;
 }
 
-template <typename T, size_t N>
+template <typename RegList, size_t N>
 static int CollectQueue(CModule& module, const byte (&signature)[N], Queue_t& queue)
 {
 	int error;
@@ -408,7 +371,7 @@ static int CollectQueue(CModule& module, const byte (&signature)[N], Queue_t& qu
 
 	if (error == SIG_FOUND_MULTIPLE)
 	{
-		spdlog::critical("Found multiple {} queue signature matches in {}, make the signature at the top of concommands.cpp more specific", queue.m_pszKind, module.m_pszModule);
+		spdlog::critical("Found multiple {} queue signature matches in {}, make the signature in gamedata.h more specific", queue.m_pszKind, module.m_pszModule);
 		queue.m_bFailed = true;
 		return 0;
 	}
@@ -417,35 +380,35 @@ static int CollectQueue(CModule& module, const byte (&signature)[N], Queue_t& qu
 	{
 		if (g_RequiredQueueModules.contains(module.m_pszModule))
 		{
-			spdlog::critical("Could not find {} queue in {}, update the signature at the top of concommands.cpp", queue.m_pszKind, module.m_pszModule);
+			spdlog::critical("Could not find {} queue in {}, update the signature in gamedata.h", queue.m_pszKind, module.m_pszModule);
 			queue.m_bFailed = true;
 		}
 
 		return 0;
 	}
 
-	auto head = (CVarQueueBlock_t<T>**)(match + 7 + *(int32_t*)(match + 3));
+	auto head = Modules::GetGlobalFromSignatureMatch<RegList*>(match);
 	int count = 0;
 
-	for (auto block = *head; block; block = block->m_pNext)
+	for (auto list = *head; list; list = list->m_pPrev)
 	{
-		if (block->m_nCount < 0 || block->m_nCount > 100)
+		if (list->m_nSize > std::size(list->m_Entries))
 		{
-			spdlog::critical("{} queue block in {} has {} entries, the layout at the top of concommands.cpp needs updating", queue.m_pszKind, module.m_pszModule, block->m_nCount);
+			spdlog::critical("{} list in {} has {} entries, the layout in gamedata.h needs updating", queue.m_pszKind, module.m_pszModule, list->m_nSize);
 			queue.m_bFailed = true;
 			return count;
 		}
 
-		for (int i = 0; i < block->m_nCount; i++, count++)
+		for (uint32 i = 0; i < list->m_nSize; i++, count++)
 		{
-			if (auto invalid = ValidateQueued(block->m_Entries[i]))
+			if (auto invalid = ValidateQueued(list->m_Entries[i]))
 			{
-				spdlog::critical("{} queue entry {} in {} has an invalid {}, the layout at the top of concommands.cpp needs updating", queue.m_pszKind, count, module.m_pszModule, invalid);
+				spdlog::critical("{} list entry {} in {} has an invalid {}, the layout in gamedata.h needs updating", queue.m_pszKind, count, module.m_pszModule, invalid);
 				queue.m_bFailed = true;
 				return count;
 			}
 
-			queue.m_Entries.push_back(CopyQueued(module.m_pszModule, block->m_Entries[i]));
+			queue.m_Entries.push_back(CopyQueued(module.m_pszModule, list->m_Entries[i]));
 		}
 	}
 
@@ -454,8 +417,8 @@ static int CollectQueue(CModule& module, const byte (&signature)[N], Queue_t& qu
 
 void CollectQueues(CModule& module)
 {
-	auto cvars = CollectQueue<QueuedConVar_t>(module, g_ConVarQueueSignature, g_ConVarQueue);
-	auto cmds = CollectQueue<QueuedConCommand_t>(module, g_ConCommandQueueSignature, g_ConCommandQueue);
+	auto cvars = CollectQueue<ConVarRegList>(module, g_ConVarQueueSignature, g_ConVarQueue);
+	auto cmds = CollectQueue<ConCommandRegList>(module, g_ConCommandQueueSignature, g_ConCommandQueue);
 
 	spdlog::debug("Queued in {}: {} convars, {} commands", module.m_pszModule, cvars, cmds);
 }

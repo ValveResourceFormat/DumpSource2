@@ -29,6 +29,15 @@ inline std::vector<CModule> allModules;
 inline std::unique_ptr<CModule> schemaSystem = nullptr;
 inline std::unique_ptr<CModule> tier0 = nullptr;
 
+// Signatures in gamedata.h start at a load of a global (mov reg, [rip+displacement]), this returns that global.
+// The instruction is 7 bytes with the displacement at offset 3, relative to the next instruction.
+template <typename T>
+T* GetGlobalFromSignatureMatch(const void* match)
+{
+	auto instruction = static_cast<const uint8_t*>(match);
+	return (T*)(instruction + 7 + *(const int32_t*)(instruction + 3));
+}
+
 // Game structs are read without knowing if their layout still matches, these check that pointers read from them
 // point into a loaded module (where names and registration objects are), so a changed layout fails instead of crashing.
 inline bool IsInModule(const CModule& module, const void* pointer)

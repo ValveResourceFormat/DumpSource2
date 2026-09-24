@@ -20,6 +20,7 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "gamedata.h"
 #include "globalvariables.h"
 #include "interfaces.h"
 #include <algorithm>
@@ -281,11 +282,7 @@ std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& ent
 			if (!value)
 				return "Could not parse KV3 Defaults";
 
-#ifdef WIN32
-			static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>("?SaveKV3AsJSON@@YA_NPEBVKeyValues3@@PEAVCUtlString@@1@Z");
-#else
-			static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>("_Z13SaveKV3AsJSONPK10KeyValues3P10CUtlStringS3_");
-#endif
+			static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>(GameData::g_SaveKV3AsJSONSymbol);
 
 			SimpleCUtlString err;
 			SimpleCUtlString buf;
