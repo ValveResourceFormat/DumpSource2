@@ -71,6 +71,7 @@ std::vector<AppSystemInfo> g_appSystems{
 	{ false, "assetpreview", ASSETPREVIEWSYSTEM_INTERFACE_VERSION, false },
 	{ false, "assetbrowser", ASSETBROWSERSYSTEM_INTERFACE_VERSION, false },
 	{ false, "resourcecompiler", RESOURCECOMPILERSYSTEM_INTERFACE_VERSION, false },
+	{ false, "smartprops", "SmartPropsSystem_001" },
 	{ false, "tools/hammer", "ToolSystem2_001", false },
 	{ false, "tools/met", "ToolSystem2_001", false },
 	{ false, "tools/pet", "ToolSystem2_001", false },
