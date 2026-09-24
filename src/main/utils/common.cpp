@@ -196,6 +196,13 @@ void V_StringToVector4D(const char*, Vector4D&, bool*, char**, uint, IParsingErr
 	// STUB
 }
 
+#ifndef GAME_DEADLOCK
+void V_StringToVectorWS(const char*, VectorWS&, bool*, char**, uint, IParsingErrorListener*)
+{
+	// STUB
+}
+#endif
+
 int V_tier0_strlen(const char*) {
 	// STUB
 	return 0;
