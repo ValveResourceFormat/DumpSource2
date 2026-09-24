@@ -39,6 +39,15 @@ void GetModuleMetadata(const CModule& module, SimpleCUtlString& err, SimpleCUtlS
 	SimpleCUtlString additional_info;
 	auto kv3 = extractModuleMetadataFn(additional_info);
 
+	// Modules without metadata return null on Linux (and an empty kv3 on Windows)
+	if (!kv3)
+	{
+		if (additional_info.Get())
+			spdlog::debug("{} has no metadata: {}", module.m_pszModule, additional_info.Get());
+
+		return;
+	}
+
 	typedef int (*SaveKV3Text_ToString)(KV3ID_t const&, void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
 #ifdef WIN32
 	static auto saveKV3Text_ToStringFn = Modules::tier0->GetSymbol<SaveKV3Text_ToString>("?SaveKV3Text_ToString@@YA_NAEBUKV3ID_t@@PEBVKeyValues3@@PEAVCUtlString@@2I@Z");
