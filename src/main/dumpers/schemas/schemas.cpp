@@ -19,7 +19,9 @@
 
 #include "schemas.h"
 #include "interfaces.h"
+#include <algorithm>
 #include <optional>
+#include <tuple>
 #include "metadata_stringifier.h"
 #include <spdlog/spdlog.h>
 #define private public
@@ -175,6 +177,11 @@ void Dump()
 		DumpTypeScope(typeScopes[i], enums, classes);
 
 	DumpTypeScope(schemaSystem->GlobalTypeScope(), enums, classes);
+
+	// Schema system order depends on registration order, sort so the output is stable between runs
+	auto byModuleAndName = [](const auto& a, const auto& b) { return std::tie(a.module, a.name) < std::tie(b.module, b.name); };
+	std::stable_sort(enums.begin(), enums.end(), byModuleAndName);
+	std::stable_sort(classes.begin(), classes.end(), byModuleAndName);
 
 	FilesystemExporter::Dump(enums, classes);
 	JsonExporter::Dump(enums, classes);
