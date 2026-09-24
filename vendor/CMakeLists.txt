@@ -19,18 +19,24 @@ function(BUILD_HL2SDK GAME SDK_PATH)
 		)
 
 		# Routes the CRT allocator to tier0's like the game's modules do, so memory the game allocates
-		# (like CUtlVector elements) can be freed with the SDK's containers
-		target_sources(HL2SDK-${GAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/public/tier0/memoverride.cpp)
-		target_compile_definitions(HL2SDK-${GAME} INTERFACE MEMOVERRIDE_MODULE=DumpSource2)
+		# (like CUtlVector elements) can be freed with the SDK's containers.
+		# Older games' tier0 has another IMemAlloc layout, and nothing frees game memory for them.
+		if(NOT GAME IN_LIST SDKS_WITHOUT_MEMOVERRIDE)
+			target_sources(HL2SDK-${GAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/public/tier0/memoverride.cpp)
+			target_compile_definitions(HL2SDK-${GAME} INTERFACE MEMOVERRIDE_MODULE=DumpSource2)
+		endif()
 	else()
 		target_link_libraries(HL2SDK-${GAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/lib/linux64/interfaces.a)
 	endif()
 endfunction()
 
+set(SDKS_WITHOUT_MEMOVERRIDE HLVR)
+
 # DO NOT MODIFY, if you wish to switch the sdk for a game do it in src/main/CMakeLists.txt
 build_hl2sdk(CS2 hl2sdk-cs2)
 build_hl2sdk(DOTA hl2sdk-dota)
 build_hl2sdk(DEADLOCK hl2sdk-deadlock)
+build_hl2sdk(HLVR hl2sdk-hlvr)
 
 # EXTERNAL LIBRARIES
 # ---

@@ -25,3 +25,8 @@
 	path = vendor/json
 	url = https://github.com/nlohmann/json
 	shallow = true
+[submodule "hl2sdk-hlvr"]
+	path = vendor/hl2sdk-hlvr
+	url = https://github.com/ValveResourceFormat/hl2sdk
+	branch = hlvr
+	shallow = true

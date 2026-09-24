@@ -61,6 +61,7 @@ struct IntermediateSchemaClass
 	std::vector<IntermediateMetadata> metadata;
 	std::vector<IntermediateSchemaClassParent> parents;
 	std::vector<IntermediateSchemaClassField> fields;
+	std::vector<IntermediateSchemaClassField> staticFields; // Only Half-Life: Alyx has them, their offset is unused
 };
 
 struct IntermediateSchemaEnumMember

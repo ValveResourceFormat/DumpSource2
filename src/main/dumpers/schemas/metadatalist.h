@@ -41,6 +41,7 @@ enum class MetadataValueType
 	NETWORK_OVERRIDE,
 	KV3DEFAULTS,
 	SEND_PROXY_RECIPIENTS_FILTER,
+	USER_GROUP_SEND_PROXY_RECIPIENTS_FILTER,
 };
 
 inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
@@ -48,6 +49,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MAlternateSemanticName", MetadataValueType::STRING },
 	{ "MCellForDomain", MetadataValueType::STRING },
 	{ "MCustomFGDMetadata", MetadataValueType::STRING },
+	{ "MDefaultString", MetadataValueType::STRING },
 	{ "MEntitySubclassScopeFile", MetadataValueType::STRING },
 	{ "MFgdHelper", MetadataValueType::STRING },
 	{ "MFieldVerificationName", MetadataValueType::STRING },
@@ -67,6 +69,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MNetworkUserGroupProxy", MetadataValueType::STRING },
 	{ "MParticleReplacementOp", MetadataValueType::STRING },
 	{ "MPropertyArrayElementNameKey", MetadataValueType::STRING },
+	{ "MPropertyAttributeChoiceEnumName", MetadataValueType::STRING },
 	{ "MPropertyAttributeChoiceName", MetadataValueType::STRING },
 	{ "MPropertyAttributeEditor", MetadataValueType::STRING },
 	{ "MPropertyAttributeRange", MetadataValueType::STRING },
@@ -74,6 +77,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MPropertyCustomEditor", MetadataValueType::STRING },
 	{ "MPropertyCustomFGDType", MetadataValueType::STRING },
 	{ "MPropertyDescription", MetadataValueType::STRING },
+	{ "MPropertyEditClassCustomEditor", MetadataValueType::STRING },
 	{ "MPropertyExtendedEditor", MetadataValueType::STRING },
 	{ "MPropertyFriendlyName", MetadataValueType::STRING },
 	{ "MPropertyGroupName", MetadataValueType::STRING },
@@ -155,7 +159,11 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	// FUNCTION, pointers to code that have no printable value
 	{ "MDebugSnapshotDataRenderFn", MetadataValueType::FUNCTION },
 	{ "MDebugSnapshotDataSummaryFn", MetadataValueType::FUNCTION },
+	{ "MParticleCustomFieldDefaultValue", MetadataValueType::FUNCTION },
+	{ "MPropertyAttrChangeCallback", MetadataValueType::FUNCTION },
 	{ "MPropertyAttrStateCallback", MetadataValueType::FUNCTION },
+	{ "MPropertyChoiceProviderFn", MetadataValueType::FUNCTION },
+	{ "MPropertyEditClassAsString", MetadataValueType::FUNCTION },
 	{ "MPropertyElementNameFn", MetadataValueType::FUNCTION },
 	{ "MPropertyLeafChoiceProviderFn", MetadataValueType::FUNCTION },
 	{ "MPropertyLeafSuggestionProviderFn", MetadataValueType::FUNCTION },
@@ -178,7 +186,13 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MGetKV3ClassDefaults", MetadataValueType::KV3DEFAULTS },
 
 	// MISC
+#ifdef GAME_HLVR
+	// Only the filter function in Half-Life: Alyx
+	{ "MNetworkSendProxyRecipientsFilter", MetadataValueType::FUNCTION },
+#else
 	{ "MNetworkSendProxyRecipientsFilter", MetadataValueType::SEND_PROXY_RECIPIENTS_FILTER },
+#endif
+	{ "MNetworkUserGroupSendProxyRecipientsFilter", MetadataValueType::USER_GROUP_SEND_PROXY_RECIPIENTS_FILTER },
 };
 
 } // namespace Dumpers::Schemas
