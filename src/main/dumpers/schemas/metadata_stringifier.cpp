@@ -43,33 +43,32 @@ namespace Dumpers::Schemas
 {
 
 std::unordered_set<std::string> g_classWithBrokenDefaults = {
-	"CastSphereSATParams_t",
-	"Dop26_t",
-	"FourCovMatrices3",
-	"VMixVocoderDesc_t",
-	"CCitadelPlayerPawn_GraphController2",
-	"RTProxyBLAS_t",
-	"vphysics_save_ragdoll_control_t",
-	"CAnimAttachment",
-	"CBlockSelectionMetricEvaluator",
-	"HitReactFixedSettings_t",
-	"RnSoftbodySpring_t",
-	"CAnimGraphDoc_GroupNode",
+	// Crash, their constructors need a running game (owning entity, game systems)
 	"C_fogplayerparams_t",
 	"fogplayerparams_t",
 	"CBodyComponentBaseAnimating",
-	"CBodyComponentPoint",
-	"CSkeletonInstance",
-	"CGameSceneNode",
 	"CBodyComponentBaseAnimGraph",
-	"CBodyComponentSkeletonInstance"
+	"CBodyComponentPoint",
+	"CBodyComponentSkeletonInstance",
+	"CCitadelPlayerPawn_GraphController2",
+	"CGameSceneNode",
+	"CSkeletonInstance",
+
+	// Different output between runs
+	"CAnimAttachment",
+	"CAnimGraphDoc_GroupNode",
+	"CBlockSelectionMetricEvaluator",
+	"CastSphereSATParams_t",
+	"FourCovMatrices3",
+	"HitReactFixedSettings_t",
+	"RTProxyBLAS_t",
+	"vphysics_save_ragdoll_control_t",
 };
 
+// Fields that constructors fill with random values or leave partially uninitialized
 std::vector<std::regex> g_regexFilters = {
 	std::regex(R"#(("m_id":) .*)#"),
 	std::regex(R"#(("m_ID":) .*,)#"),
-	std::regex(R"#(("m_nControlPointCount":) .*)#"),
-	std::regex(R"#(("m_nControlPointStart":) .*)#"),
 	std::regex(R"#(("m_nRandomSeed":) .*,)#"),
 	std::regex(R"#(("m_seed":) .*,)#"),
 	std::regex(R"#(("m_outputPinID":) .*,)#"),
@@ -78,6 +77,7 @@ std::vector<std::regex> g_regexFilters = {
 	std::regex(R"#(("m_entryStateID":) .*)#"),
 	std::regex(R"#(("pitchfrac":) .*)#"),
 	std::regex(R"#(("vol":) .*)#"),
+	std::regex(R"#(("m_cloneStateVersion":) .*)#"),
 };
 
 typedef void* (*GetKV3DefaultsFn)();
