@@ -166,7 +166,6 @@ void DumpTypeScope(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSc
 
 void Dump()
 {
-	spdlog::info("Dumping schemasystem");
 	auto schemaSystem = Interfaces::schemaSystem;
 
 	const auto& typeScopes = schemaSystem->m_TypeScopes;

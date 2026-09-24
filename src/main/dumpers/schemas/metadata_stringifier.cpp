@@ -286,11 +286,6 @@ std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& ent
 #else
 			static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>("_Z13SaveKV3AsJSONPK10KeyValues3P10CUtlStringS3_");
 #endif
-			if (!SaveKV3AsJson)
-			{
-				spdlog::critical("SaveKV3AsJson not found");
-				return {};
-			}
 
 			SimpleCUtlString err;
 			SimpleCUtlString buf;

@@ -19,6 +19,7 @@
 
 #pragma once
 #include "appframework/IAppSystem.h"
+#include <spdlog/spdlog.h>
 
 class DumperApplication : public CTier0AppSystem<IAppSystem>
 {
@@ -38,7 +39,7 @@ class DumperApplication : public CTier0AppSystem<IAppSystem>
 	virtual int AddSystems(int count, void** pAppSystems) { return 0; };
 	virtual void* FindSystem(const char* interfaceName) { return nullptr; };
 	virtual void* GetGameInfo() {
-		printf("called getgameinfo\n");
+		spdlog::debug("IApplication::GetGameInfo called, returning null");
 		return nullptr;
 	};
 	virtual unsigned int unk1() { return -1; };

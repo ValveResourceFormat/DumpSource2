@@ -31,7 +31,7 @@ namespace Dumpers::ModuleMetadata
 
 void GetModuleMetadata(const CModule& module, SimpleCUtlString& err, SimpleCUtlString& buf)
 {
-	spdlog::info("Dumping metadata for {}", module.m_pszModule);
+	spdlog::trace("Dumping metadata for {}", module.m_pszModule);
 
 	typedef void* (*ExtractModuleMetadata)(SimpleCUtlString& str);
 	auto extractModuleMetadataFn = module.GetSymbol<ExtractModuleMetadata>("ExtractModuleMetadata");
@@ -63,7 +63,6 @@ void GetModuleMetadata(const CModule& module, SimpleCUtlString& err, SimpleCUtlS
 
 void Dump()
 {
-	spdlog::info("Dumping module metadata");
 	std::unordered_set<std::string> foundModules;
 	const auto outputPath = Globals::outputPath / "module_metadata";
 
@@ -81,7 +80,7 @@ void Dump()
 
 			if (!std::filesystem::is_directory(outputPath) && !std::filesystem::create_directory(outputPath))
 			{
-				spdlog::error("Failed to create module_metadata directory");
+				spdlog::error("Failed to create {}", outputPath.generic_string());
 				return;
 			}
 
@@ -89,6 +88,8 @@ void Dump()
 			output << buf.Get() << std::endl;
 		}
 	}
+
+	spdlog::info("Wrote module metadata for {} modules", foundModules.size());
 
 	if (!std::filesystem::is_directory(outputPath))
 		return;

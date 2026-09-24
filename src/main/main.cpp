@@ -55,11 +55,11 @@ int main(int argc, char** argv)
 
 	if (!std::filesystem::is_directory(Globals::outputPath))
 	{
-		printf("Output path is not a valid folder\n");
-		return 0;
+		spdlog::critical("Output path {} is not an existing folder", Globals::outputPath.generic_string());
+		return 1;
 	}
 
-	spdlog::info("Starting Source2Dumper");
+	spdlog::info("Dumping {} to {}", GAME_PATH, std::filesystem::absolute(Globals::outputPath).generic_string());
 
 	// Parse steam.inf for version info
 	{
@@ -77,11 +77,11 @@ int main(int argc, char** argv)
 				else if (line.starts_with("VersionTime="))
 					Globals::versionTime = line.substr(12);
 			}
-			spdlog::info("Read steam.inf: revision={} date={} time={}", Globals::sourceRevision, Globals::versionDate, Globals::versionTime);
+			spdlog::info("Game revision {} built {} {}", Globals::sourceRevision, Globals::versionDate, Globals::versionTime);
 		}
 		else
 		{
-			spdlog::warn("Failed to open {}", steamInfPath.generic_string());
+			spdlog::warn("Failed to open {}, the version will be missing from schemas.json", steamInfPath.lexically_normal().generic_string());
 		}
 	}
 

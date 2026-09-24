@@ -176,13 +176,12 @@ void DumpEnums(const std::vector<IntermediateSchemaEnum>& enums, std::filesystem
 
 void Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<IntermediateSchemaClass>& classes)
 {
-	spdlog::info("Dumping schemas to filesystem");
 	const auto schemaPath = Globals::outputPath / "schemas";
 
 	if (!std::filesystem::is_directory(schemaPath))
 		if (!std::filesystem::create_directory(schemaPath))
 		{
-			spdlog::error("Failed to create schemas directory");
+			spdlog::error("Failed to create {}", schemaPath.generic_string());
 			return;
 		}
 
