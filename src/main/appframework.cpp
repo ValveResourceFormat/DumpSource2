@@ -79,6 +79,7 @@ std::vector<AppSystemInfo> g_appSystems{
 	{ false, "localize", "Localize_001" },
 	{ false, "modeldoc_utils", "ModelDocUtils001" },
 	{ false, "navsystem", "NavSystem001" },
+	{ false, "p4lib", "VP4003" },
 	{ false, "panorama_text_pango", "PanoramaTextServices001" },
 	{ false, "panoramauiclient", "PanoramaUIClient001" },
 	{ false, "physicsbuilder", "PhysicsBuilderMgr001" },
@@ -172,17 +173,18 @@ void InitializeModules()
 	std::set<std::string> seen{ "tier0", "schemasystem" };
 	const std::string gameBin = fmt::format("../../{}/bin/{}", GAME_PATH, PLATFORM_FOLDER);
 
-	auto addModule = [&](const std::string& path, const std::string& name) {
+	// App systems are always loaded for their interfaces, other modules only if they link tier1 and can have convars or schemas
+	auto addModule = [&](const std::string& path, const std::string& name, bool isAppSystem) {
 		if (!seen.insert(name).second)
 			return;
 
 		auto file = (std::filesystem::current_path() / path / (MODULE_PREFIX + name + MODULE_EXT)).lexically_normal();
-		if (std::filesystem::exists(file) && FileContains(file, "RegisterConVar: Unknown error"))
+		if (std::filesystem::exists(file) && (isAppSystem || FileContains(file, "RegisterConVar: Unknown error")))
 			modules.push_back({ path, name, file.generic_string() });
 	};
 
 	for (const auto& appSystem : g_appSystems)
-		addModule(appSystem.gameBin ? gameBin : "", appSystem.moduleName);
+		addModule(appSystem.gameBin ? gameBin : "", appSystem.moduleName, true);
 
 	for (const auto& [path, prefix] : std::vector<std::pair<std::string, std::string>>{ { "", "" }, { "", "tools/" }, { "", "subtools/" }, { gameBin, "" } })
 	{
@@ -200,7 +202,7 @@ void InitializeModules()
 
 		std::sort(found.begin(), found.end());
 		for (const auto& name : found)
-			addModule(path, name);
+			addModule(path, name, false);
 	}
 
 	// Some modules import dlls that the game does not ship (e.g. vfx_dx11 needs slang)
