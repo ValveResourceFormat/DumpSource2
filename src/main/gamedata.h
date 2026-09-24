@@ -180,4 +180,21 @@ inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\x
 // Modules that always declare both, not finding their queues means the signatures are outdated
 inline const std::unordered_set<std::string> g_RequiredQueueModules = { "tier0", "engine2", "client", "server" };
 
+//-----------------------------------------------------------------------------
+// Entities
+//-----------------------------------------------------------------------------
+
+// Each linked entity class (CEntityClass from the SDK) is added to a per module list when the module is loaded.
+// Signature of the list walk that builds entity_api_designname_to_base for module metadata,
+// starting at the list head load.
+// To update, find the xref to the "entity_api_designname_to_base" string in server.
+#ifdef _WIN32
+inline const byte g_EntityClassListSignature[] = "\x48\x8B\x35\x2A\x2A\x2A\x2A\x33\xED\x4C\x8B\xFA\x48\x85\xF6\x0F\x84\x2A\x2A\x2A\x2A\x48\x89\x5C\x24\x2A\x48\x89\x7C\x24\x2A\x4C\x89\x64\x24\x2A\x4C\x8D\x25";
+#else
+inline const byte g_EntityClassListSignature[] = "\x48\x8B\x1D\x2A\x2A\x2A\x2A\x48\x89\x75\xB0\x48\x85\xDB\x0F\x84\x2A\x2A\x2A\x2A\x4C\x8D\x45\xC0\x45\x31\xFF\x4D\x89\xC4";
+#endif
+
+// Modules that always link entities, not finding their list means the signature is outdated
+inline const std::unordered_set<std::string> g_RequiredEntityModules = { "client", "server" };
+
 } // namespace GameData
