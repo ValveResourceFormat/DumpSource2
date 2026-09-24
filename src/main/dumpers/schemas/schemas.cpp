@@ -25,9 +25,7 @@
 #include <tuple>
 #include "metadata_stringifier.h"
 #include <spdlog/spdlog.h>
-#define private public
 #include "schemasystem/schemasystem.h"
-#undef private
 #include "filesystem_exporter.h"
 #include "json_exporter.h"
 
@@ -255,7 +253,7 @@ std::vector<CSchemaSystemTypeScope*> GetTypeScopes()
 	const auto& typeScopes = schemaSystem->m_TypeScopes;
 
 	std::vector<CSchemaSystemTypeScope*> scopes;
-	for (auto i = 0; i < typeScopes.m_Vector.Count(); ++i)
+	for (auto i = 0; i < typeScopes.GetNumStrings(); ++i)
 		scopes.push_back(typeScopes[i]);
 
 	scopes.push_back(schemaSystem->GlobalTypeScope());
@@ -281,6 +279,11 @@ bool Dump()
 	auto byModuleAndName = [](const auto& a, const auto& b) { return std::tie(a.module, a.name) < std::tie(b.module, b.name); };
 	std::stable_sort(enums.begin(), enums.end(), byModuleAndName);
 	std::stable_sort(classes.begin(), classes.end(), byModuleAndName);
+
+	// Static libraries like pulse_runtime_lib declare the same schemas in every module that links them
+	auto sameModuleAndName = [](const auto& a, const auto& b) { return std::tie(a.module, a.name) == std::tie(b.module, b.name); };
+	enums.erase(std::unique(enums.begin(), enums.end(), sameModuleAndName), enums.end());
+	classes.erase(std::unique(classes.begin(), classes.end(), sameModuleAndName), classes.end());
 
 	FilesystemExporter::Dump(enums, classes);
 	JsonExporter::Dump(enums, classes);
