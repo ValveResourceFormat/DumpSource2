@@ -27,6 +27,7 @@
 #include "dumpers/concommands/concommands.h"
 #include "dumpers/entities/entities.h"
 #include "dumpers/interfaces/interfaces.h"
+#include "dumpers/logging_channels/logging_channels.h"
 #include "dumpers/schemas/schemas.h"
 #include "dumpers/module_metadata/module_metadata.h"
 
@@ -120,6 +121,9 @@ int main(int argc, char** argv)
 		exitCode = 1;
 
 	if (!Dumpers::Interfaces::Dump())
+		exitCode = 1;
+
+	if (!Dumpers::LoggingChannels::Dump())
 		exitCode = 1;
 
 	WriteStringsIgnore();
