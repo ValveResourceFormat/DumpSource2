@@ -34,7 +34,7 @@
 #include <map>
 #include <optional>
 #include <unordered_set>
-#include "utils/module.h"
+#include "modules.h"
 #include <spdlog/spdlog.h>
 
 namespace Dumpers::ConCommands
@@ -365,6 +365,41 @@ static QueuedEntry_t CopyQueued(const char* module, const QueuedConCommand_t& qu
 	return { module, creation.m_pszName, creation.m_pszHelpString ? creation.m_pszHelpString : "", creation.m_nFlags };
 }
 
+// A changed queue layout can still match the signature, so check what is read from the entries before using them.
+// Returns what is invalid, or null.
+static const char* ValidateQueued(const QueuedConVar_t& queued)
+{
+	const auto& creation = queued.m_Creation;
+	const auto& info = creation.m_valueInfo;
+
+	if (!Modules::IsValidName(creation.m_pszName))
+		return "name";
+	if (creation.m_pszHelpString && !Modules::FindModuleContaining(creation.m_pszHelpString))
+		return "help string";
+	if (info.m_eVarType <= EConVarType_Invalid || info.m_eVarType >= EConVarType_MAX)
+		return "type";
+
+	for (auto flag : { &info.m_bHasDefault, &info.m_bHasMin, &info.m_bHasMax })
+	{
+		if (*(const uint8*)flag > 1)
+			return "has value flags";
+	}
+
+	return nullptr;
+}
+
+static const char* ValidateQueued(const QueuedConCommand_t& queued)
+{
+	const auto& creation = queued.m_Creation;
+
+	if (!Modules::IsValidName(creation.m_pszName))
+		return "name";
+	if (creation.m_pszHelpString && !Modules::FindModuleContaining(creation.m_pszHelpString))
+		return "help string";
+
+	return nullptr;
+}
+
 template <typename T, size_t N>
 static int CollectQueue(CModule& module, const byte (&signature)[N], Queue_t& queue)
 {
@@ -394,8 +429,24 @@ static int CollectQueue(CModule& module, const byte (&signature)[N], Queue_t& qu
 
 	for (auto block = *head; block; block = block->m_pNext)
 	{
-		for (int i = 0; i < block->m_nCount && i < 100; i++, count++)
+		if (block->m_nCount < 0 || block->m_nCount > 100)
+		{
+			spdlog::critical("{} queue block in {} has {} entries, the layout at the top of concommands.cpp needs updating", queue.m_pszKind, module.m_pszModule, block->m_nCount);
+			queue.m_bFailed = true;
+			return count;
+		}
+
+		for (int i = 0; i < block->m_nCount; i++, count++)
+		{
+			if (auto invalid = ValidateQueued(block->m_Entries[i]))
+			{
+				spdlog::critical("{} queue entry {} in {} has an invalid {}, the layout at the top of concommands.cpp needs updating", queue.m_pszKind, count, module.m_pszModule, invalid);
+				queue.m_bFailed = true;
+				return count;
+			}
+
 			queue.m_Entries.push_back(CopyQueued(module.m_pszModule, block->m_Entries[i]));
+		}
 	}
 
 	return count;

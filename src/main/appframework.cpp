@@ -221,9 +221,9 @@ void InitializeModules()
 			continue;
 		}
 
-		CModule loaded(module.path.c_str(), module.name.c_str());
-		Dumpers::ConCommands::CollectQueues(loaded);
-		Modules::allModules.emplace_back(std::move(loaded));
+		// Added before reading the queues, which check that names point into a loaded module
+		Modules::allModules.emplace_back(module.path.c_str(), module.name.c_str());
+		Dumpers::ConCommands::CollectQueues(Modules::allModules.back());
 	}
 
 	spdlog::info("Loaded {} modules{}", Modules::allModules.size(), failed.empty() ? "" : fmt::format(", failed to load {}", failed));
