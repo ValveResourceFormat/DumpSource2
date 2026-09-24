@@ -79,10 +79,11 @@ static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_VCONSOLE_SET_FOCUS, "vconsole_set_focus" },
 	{ FCVAR_CLIENTCMD_CAN_EXECUTE, "clientcmd_can_execute" },
 	{ FCVAR_EXECUTE_PER_TICK, "execute_per_tick" },
-	// Not in every SDK yet
-	{ 1ull << 30, "snapshot_ignored" },
+	{ 1ull << 30, "snapshot_ignored" }, // Not in every SDK yet
 	{ FCVAR_DEFENSIVE, "defensive" },
-	{ 1ull << 34, "gameinfo_cannot_override" },
+	{ 1ull << 33, "execute_immediately" },      // Not in any SDK, name is ours. Runs right away inside a __beginseq batch instead of being queued (exec, execifexists)
+	{ 1ull << 34, "gameinfo_cannot_override" }, // Not in every SDK yet
+	{ 1ull << 37, "enum_value" },               // Not in any SDK, name is ours. Value is a schema enum or enum flags, written as enumerator names
 };
 
 static std::vector<std::string> GetFlagNames(uint64_t flags)
