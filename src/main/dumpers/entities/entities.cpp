@@ -212,12 +212,17 @@ static const char* ValidateDataMap(const datamap_t* map)
 	return nullptr;
 }
 
-using EnumMap = std::unordered_map<std::string, const SchemaEnumInfoData_t*>;
+// Schema enums, which have the values of enum keys, and the modules of schema classes, by name
+struct ModuleSchemas_t
+{
+	std::unordered_map<std::string, const SchemaEnumInfoData_t*> m_Enums;
+	std::unordered_map<std::string, std::string> m_ClassModules;
+};
 
-// Schema enums by name, which have the values of enum keys. Enums shared by client and server are only in one of their scopes,
-// and others are in library scopes, so all scopes are used. The module's own scope comes first, then the others by name.
+// Enums and classes shared by client and server are only in one of their scopes, and others are in library scopes,
+// so all scopes are used. The module's own scope comes first, then the others by name.
 // Returns false if an enum is invalid.
-static bool GetModuleEnums(const CModule& module, EnumMap& enums)
+static bool GetModuleSchemas(const CModule& module, ModuleSchemas_t& schemas)
 {
 	if (!Interfaces::schemaSystem)
 	{
@@ -238,13 +243,24 @@ static bool GetModuleEnums(const CModule& module, EnumMap& enums)
 		{
 			const auto enumInfo = typeScope->m_DeclaredEnums.m_Map.Element(iter)->m_pEnumInfo;
 
+			// Declared by name only
+			if (!enumInfo)
+				continue;
+
 			if (auto invalid = Schemas::ValidateEnum(enumInfo))
 			{
 				spdlog::critical("Schema enum in {} has an invalid {}, SchemaEnumInfoData_t in the SDK needs updating", typeScope->m_szScopeName, invalid);
 				return false;
 			}
 
-			enums.try_emplace(enumInfo->m_pszName, enumInfo);
+			schemas.m_Enums.try_emplace(enumInfo->m_pszName, enumInfo);
+		}
+
+		// Validated by the schemas dumper
+		FOR_EACH_MAP(typeScope->m_DeclaredClasses.m_Map, iter)
+		{
+			if (const auto classInfo = typeScope->m_DeclaredClasses.m_Map.Element(iter)->m_pClassInfo)
+				schemas.m_ClassModules.try_emplace(classInfo->m_pszName, classInfo->m_pszProjectName);
 		}
 	}
 
@@ -285,7 +301,7 @@ static bool GetArrayKeyNames(const typedescription_t& field, const char* key, st
 // Enum keys list their values as choices. Keys from embedded datamaps (like CCollisionProperty) are indented under a comment with their field.
 // The same keys go into keysJson, with the path of the embedded datamap fields they are under.
 // Returns false if the datamap is not what it's expected to be.
-static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::string& indent, const std::string& path, std::vector<std::string>& lines, nlohmann::json& keysJson,
+static bool AddKeyFields(const datamap_t* map, const ModuleSchemas_t& schemas, const std::string& indent, const std::string& path, std::vector<std::string>& lines, nlohmann::json& keysJson,
 	std::vector<std::string>& strings)
 {
 	for (int i = 0; i < map->dataNumFields; i++)
@@ -300,7 +316,7 @@ static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::
 				continue;
 
 			std::vector<std::string> embedded;
-			if (!AddKeyFields(field.td, enums, indent + "\t", path.empty() ? field.fieldName : path + "." + field.fieldName, embedded, keysJson, strings))
+			if (!AddKeyFields(field.td, schemas, indent + "\t", path.empty() ? field.fieldName : path + "." + field.fieldName, embedded, keysJson, strings))
 				return false;
 
 			if (!embedded.empty())
@@ -332,7 +348,7 @@ static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::
 		nlohmann::json keyJson;
 		if (Modules::IsValidName(field.enumName))
 		{
-			if (auto it = enums.find(field.enumName); it != enums.end())
+			if (auto it = schemas.m_Enums.find(field.enumName); it != schemas.m_Enums.end())
 				enumInfo = it->second;
 			else
 				spdlog::warn("Enum {} of key {} in {} is not in the schema system", field.enumName, key, map->dataClassName);
@@ -356,6 +372,10 @@ static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::
 		keyJson["name"] = key;
 		keyJson["type"] = typeName;
 		keyJson["declaredIn"] = map->dataClassName;
+
+		// Embedded structs can be from another module, like hudtextparms_t in server's CGameText is only in client
+		if (auto it = schemas.m_ClassModules.find(map->dataClassName); it != schemas.m_ClassModules.end())
+			keyJson["declaredInModule"] = it->second;
 
 		if (!isProcedural)
 			keyJson["field"] = field.fieldName;
@@ -437,8 +457,9 @@ static const char* GetPulseFGDType(const std::string& type)
 	return "string";
 }
 
-// Pulse parameters without the target parameter, as [{ name, type }] like in schemas.json
-static nlohmann::json GetPulseParams(const nlohmann::ordered_json& meta, const char* paramsKey, const std::string& targetArg)
+// Pulse parameters without the target parameter, as [{ name, type }] like in schemas.json.
+// Schema enum parameters, typed like PVAL_SCHEMA_ENUM:Name or PVAL_ARRAY:PVAL_SCHEMA_ENUM:Name, also get the enum's module.
+static nlohmann::json GetPulseParams(const nlohmann::ordered_json& meta, const char* paramsKey, const std::string& targetArg, const ModuleSchemas_t& schemas)
 {
 	auto params = nlohmann::json::array();
 
@@ -446,8 +467,20 @@ static nlohmann::json GetPulseParams(const nlohmann::ordered_json& meta, const c
 	{
 		for (const auto& [name, param] : it->items())
 		{
-			if (name != targetArg)
-				params.push_back({ { "name", name }, { "type", param.value("type", std::string()) } });
+			if (name == targetArg)
+				continue;
+
+			const auto type = param.value("type", std::string());
+			nlohmann::json paramJson{ { "name", name }, { "type", type } };
+
+			constexpr std::string_view enumPrefix = "PVAL_SCHEMA_ENUM:";
+			if (auto prefix = type.find(enumPrefix); prefix != std::string::npos)
+			{
+				if (auto it = schemas.m_Enums.find(type.substr(prefix + enumPrefix.size())); it != schemas.m_Enums.end())
+					paramJson["enumModule"] = it->second->m_pszProjectName;
+			}
+
+			params.push_back(std::move(paramJson));
 		}
 	}
 
@@ -467,7 +500,7 @@ static std::string FormatPulseParams(const nlohmann::json& params)
 // Entity inputs and outputs are Pulse bindings in the module metadata, on the API class of the entity (like CBaseTrigger_API).
 // Their target parameter is a handle to the entity's design name, or to any entity for the base entity API.
 // Returns false if the metadata is not what it's expected to be.
-static bool AddInputsAndOutputs(const CModule& module, const std::string& rootName, std::map<std::string, EntityClass_t>& classes)
+static bool AddInputsAndOutputs(const CModule& module, const std::string& rootName, const ModuleSchemas_t& schemas, std::map<std::string, EntityClass_t>& classes)
 {
 	auto metadata = ModuleMetadata::GetJSON(module);
 
@@ -521,7 +554,7 @@ static bool AddInputsAndOutputs(const CModule& module, const std::string& rootNa
 		}
 
 		auto name = key.substr(key.rfind(':') + 1);
-		auto params = GetPulseParams(meta, paramsKey, targetArg);
+		auto params = GetPulseParams(meta, paramsKey, targetArg, schemas);
 
 		// Inputs with several parameters can only be called from Pulse
 		const bool isApi = params.size() > 1;
@@ -529,9 +562,11 @@ static bool AddInputsAndOutputs(const CModule& module, const std::string& rootNa
 		                                                      : GetPulseFGDType(params[0]["type"].get<std::string>());
 		auto line = fmt::format("\t{} {}({})", isInput ? "input" : "output", name, fgdType);
 
+		// Empty lists and a false pulseNode are left out
 		nlohmann::json json;
 		json["name"] = name;
-		json["params"] = params;
+		if (!params.empty())
+			json["params"] = params;
 
 		std::vector<std::string> comments;
 		if (!params.empty())
@@ -540,7 +575,7 @@ static bool AddInputsAndOutputs(const CModule& module, const std::string& rootNa
 		// Some inputs are Pulse functions that return values
 		if (isInput)
 		{
-			auto returned = GetPulseParams(meta, "pulse_outparams", targetArg);
+			auto returned = GetPulseParams(meta, "pulse_outparams", targetArg, schemas);
 			if (!returned.empty())
 				comments.push_back("returns " + FormatPulseParams(returned));
 
@@ -549,8 +584,10 @@ static bool AddInputsAndOutputs(const CModule& module, const std::string& rootNa
 			if (isPulseNode)
 				comments.push_back("Pulse node");
 
-			json["returns"] = std::move(returned);
-			json["pulseNode"] = isPulseNode;
+			if (!returned.empty())
+				json["returns"] = std::move(returned);
+			if (isPulseNode)
+				json["pulseNode"] = true;
 		}
 
 		auto comment = fmt::format("{}", fmt::join(comments, ", "));
@@ -656,7 +693,7 @@ static constexpr int g_MaxDataMapDepth = 64;
 
 // Keys the class adds to its nearest base in the FGD, from its datamap chain down to the base's datamap.
 // This includes classes in between that are not entity classes. Returns false if a datamap is invalid.
-static bool AddClassKeyFields(const CEntityClassInfo* classInfo, const CEntityClassInfo* baseInfo, const EnumMap& enums, EntityClass_t& entity)
+static bool AddClassKeyFields(const CEntityClassInfo* classInfo, const CEntityClassInfo* baseInfo, const ModuleSchemas_t& schemas, EntityClass_t& entity)
 {
 	auto baseMap = baseInfo ? baseInfo->m_pDataDescMap : nullptr;
 	int depth = 0;
@@ -676,7 +713,7 @@ static bool AddClassKeyFields(const CEntityClassInfo* classInfo, const CEntityCl
 		if (strcmp(classInfo->m_pszCPPClassname, map->dataClassName))
 			entity.m_Lines.push_back(fmt::format("\t// {}", map->dataClassName));
 
-		if (!AddKeyFields(map, enums, "\t", "", entity.m_Lines, entity.m_Keys, entity.m_Strings))
+		if (!AddKeyFields(map, schemas, "\t", "", entity.m_Lines, entity.m_Keys, entity.m_Strings))
 			return false;
 	}
 
@@ -704,10 +741,23 @@ static nlohmann::json GetEntitiesJson(std::map<std::string, std::map<std::string
 		{
 			auto classInfo = entity.m_pClass->m_pClassInfo;
 
+			// Values that are the same as the entity's own are left out: classModule when it's the module,
+			// and the declaring class and module of keys when they're the entity's class
+			const std::string classModule = classInfo->m_pSchemaBinding ? classInfo->m_pSchemaBinding->m_pszProjectName : module;
+
+			for (auto& key : entity.m_Keys)
+			{
+				if (key["declaredIn"] == classInfo->m_pszCPPClassname)
+					key.erase("declaredIn");
+				if (key.value("declaredInModule", "") == classModule)
+					key.erase("declaredInModule");
+			}
+
 			nlohmann::json json;
 			json["class"] = classInfo->m_pszCPPClassname;
 			json["module"] = module;
-			json["classModule"] = classInfo->m_pSchemaBinding ? classInfo->m_pSchemaBinding->m_pszProjectName : module;
+			if (classModule != module)
+				json["classModule"] = classModule;
 			json["spawnable"] = IsSpawnable(classInfo);
 
 			if (HasDesignName(classInfo))
@@ -806,8 +856,8 @@ bool Dump()
 		}
 
 		// Enums of keys are in the module's schema scope
-		EnumMap enums;
-		if (!GetModuleEnums(module, enums))
+		ModuleSchemas_t schemas;
+		if (!GetModuleSchemas(module, schemas))
 		{
 			failed = true;
 			continue;
@@ -836,14 +886,14 @@ bool Dump()
 				rootName = name;
 			}
 
-			if (!AddClassKeyFields(entity.m_pClass->m_pClassInfo, base, enums, entity))
+			if (!AddClassKeyFields(entity.m_pClass->m_pClassInfo, base, schemas, entity))
 			{
 				moduleFailed = true;
 				break;
 			}
 		}
 
-		if (moduleFailed || !AddInputsAndOutputs(module, rootName, classes))
+		if (moduleFailed || !AddInputsAndOutputs(module, rootName, schemas, classes))
 		{
 			failed = true;
 			continue;

@@ -35,7 +35,8 @@ static json SerializeMetadataArray(const std::vector<IntermediateMetadata>& meta
 	{
 		json j;
 		j["name"] = metadata.name;
-		if (metadata.hasValue && metadata.stringValue.has_value())
+		// KV3 defaults of classes without any are null, which are left out like metadata without a value
+		if (metadata.hasValue && metadata.stringValue.has_value() && !(metadata.jsonValue && metadata.jsonValue->is_null()))
 		{
 			j["value"] = metadata.jsonValue.value_or(*metadata.stringValue);
 		}
@@ -164,6 +165,12 @@ static void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, jso
 		classObj["module"] = intermediateClass.module;
 		classObj["size"] = intermediateClass.size;
 
+		if (intermediateClass.alignment != 255)
+			classObj["alignment"] = intermediateClass.alignment;
+
+		if (!intermediateClass.flags.empty())
+			classObj["flags"] = intermediateClass.flags;
+
 		auto classMetadataArr = SerializeMetadataArray(intermediateClass.metadata);
 		if (classMetadataArr.size())
 			classObj["metadata"] = std::move(classMetadataArr);
@@ -174,6 +181,9 @@ static void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, jso
 			json parentObj;
 			parentObj["name"] = parent.name;
 			parentObj["module"] = parent.module;
+
+			if (parent.offset)
+				parentObj["offset"] = parent.offset;
 			parents.push_back(std::move(parentObj));
 		}
 

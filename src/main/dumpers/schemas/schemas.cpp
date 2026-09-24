@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <optional>
 #include <tuple>
+#include <unordered_map>
 #include "metadata_stringifier.h"
 #include <spdlog/spdlog.h>
 #include "schemasystem/schemasystem.h"
@@ -109,6 +110,27 @@ const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
 	return nullptr;
 }
 
+// Metadata that schemasystem stores as class flags instead of in the class metadata.
+// Bits 16 and 17 are also used, but schemasystem has no names for them, the SDK's MConstructibleClassBase is a guess.
+static constexpr std::pair<uint32, const char*> g_ClassInfoTagFlags[] = {
+	{ SCHEMA_CF1_INFO_TAG_MNetworkAssumeNotNetworkable, "MNetworkAssumeNotNetworkable" },
+	{ SCHEMA_CF1_INFO_TAG_MNetworkNoBase, "MNetworkNoBase" },
+	{ SCHEMA_CF1_INFO_TAG_MIgnoreTypeScopeMetaChecks, "MIgnoreTypeScopeMetaChecks" },
+	{ SCHEMA_CF1_INFO_TAG_MDisableDataDescValidation, "MDisableDataDescValidation" },
+	{ SCHEMA_CF1_INFO_TAG_MClassHasEntityLimitedDataDesc, "MClassHasEntityLimitedDataDesc" },
+	{ SCHEMA_CF1_INFO_TAG_MClassHasCustomAlignedNewDelete, "MClassHasCustomAlignedNewDelete" },
+	{ SCHEMA_CF1_INFO_TAG_MHasKV3TransferPolymorphicClassname, "MHasKV3TransferPolymorphicClassname" },
+};
+
+// Class flags for schemas.json
+static constexpr std::pair<uint32, const char*> g_ClassFlags[] = {
+	// { SCHEMA_CF1_HAS_VIRTUAL_MEMBERS, "virtual" }, // Left out to not bloat schemas.json, most classes have it
+	{ SCHEMA_CF1_IS_ABSTRACT, "abstract" },
+	{ SCHEMA_CF1_HAS_TRIVIAL_CONSTRUCTOR, "trivial_constructor" },
+	{ SCHEMA_CF1_HAS_TRIVIAL_DESTRUCTOR, "trivial_destructor" },
+	{ SCHEMA_CF1_CONSTRUCT_DISALLOWED, "construct_disallowed" },
+};
+
 static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchemaClass>& classes)
 {
 	FOR_EACH_MAP(typeScope->m_DeclaredClasses.m_Map, iter)
@@ -128,8 +150,15 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 		IntermediateSchemaClass schemaClass{
 			.name = std::string(classInfo->m_pszName),
 			.module = std::string(classInfo->m_pszProjectName),
-			.size = classInfo->m_nSize
+			.size = classInfo->m_nSize,
+			.alignment = classInfo->m_nAlignment,
 		};
+
+		for (const auto& [flag, name] : g_ClassFlags)
+		{
+			if (classInfo->m_nFlags1 & flag)
+				schemaClass.flags.push_back(name);
+		}
 
 		spdlog::trace("Dumping class: '{}'", classInfo->m_pszName);
 #ifdef GAME_DOTA
@@ -142,19 +171,22 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 		for (uint16_t k = 0; k < classInfo->m_nStaticMetadataCount; k++)
 		{
 			const auto& metadataEntry = classInfo->m_pStaticMetadata[k];
-			schemaClass.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName));
+			schemaClass.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName, classInfo));
 		}
 
-		if (classInfo->m_nBaseClassCount > 0)
+		for (const auto& [flag, name] : g_ClassInfoTagFlags)
 		{
-			for (uint16_t baseIndex = 0; baseIndex < classInfo->m_nBaseClassCount; ++baseIndex)
-			{
-				const auto* baseClass = classInfo->m_pBaseClasses[baseIndex].m_pClass;
-				if (!baseClass)
-					continue;
+			if (classInfo->m_nFlags1 & flag)
+				schemaClass.metadata.push_back({ .name = name, .hasValue = false });
+		}
 
-				schemaClass.parents.emplace_back(std::string(baseClass->m_pszName), std::string(baseClass->m_pszProjectName));
-			}
+		for (uint16_t baseIndex = 0; baseIndex < classInfo->m_nBaseClassCount; ++baseIndex)
+		{
+			const auto& base = classInfo->m_pBaseClasses[baseIndex];
+			if (!base.m_pClass)
+				continue;
+
+			schemaClass.parents.push_back({ base.m_pClass->m_pszName, base.m_pClass->m_pszProjectName, base.m_nOffset });
 		}
 
 		for (uint16_t k = 0; k < classInfo->m_nFieldCount; k++)
@@ -171,7 +203,7 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 			for (uint16_t l = 0; l < field.m_nStaticMetadataCount; l++)
 			{
 				const auto& metadataEntry = field.m_pStaticMetadata[l];
-				intermediateField.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName));
+				intermediateField.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName, classInfo));
 			}
 
 			schemaClass.fields.push_back(std::move(intermediateField));
@@ -260,6 +292,55 @@ static bool DumpTypeScope(CSchemaSystemTypeScope* typeScope, std::vector<Interme
 	return DumpClasses(typeScope, classes) && DumpEnums(typeScope, enums);
 }
 
+// KV3 defaults in schemas.json leave out what a class inherits, which readers merge back in from the parents:
+// keys with the same value in the full defaults of the first parent, and _class when it's the class itself.
+// Some classes repeat thousands of inherited values, like the VData classes of Deadlock.
+static void RemoveInheritedDefaults(std::vector<IntermediateSchemaClass>& classes)
+{
+	auto findDefaults = [](IntermediateSchemaClass& schemaClass) -> nlohmann::json* {
+		for (auto& metadata : schemaClass.metadata)
+		{
+			if (metadata.name == "MGetKV3ClassDefaults" && metadata.jsonValue && metadata.jsonValue->is_object())
+				return &*metadata.jsonValue;
+		}
+
+		return nullptr;
+	};
+
+	std::unordered_map<std::string, nlohmann::json> fullDefaults;
+	for (auto& schemaClass : classes)
+	{
+		if (auto defaults = findDefaults(schemaClass))
+			fullDefaults.emplace(schemaClass.module + "/" + schemaClass.name, *defaults);
+	}
+
+	for (auto& schemaClass : classes)
+	{
+		auto defaults = findDefaults(schemaClass);
+		if (!defaults)
+			continue;
+
+		if (auto it = defaults->find("_class"); it != defaults->end() && *it == schemaClass.name)
+			defaults->erase(it);
+
+		if (schemaClass.parents.empty())
+			continue;
+
+		auto parent = fullDefaults.find(schemaClass.parents[0].module + "/" + schemaClass.parents[0].name);
+		if (parent == fullDefaults.end())
+			continue;
+
+		for (auto it = defaults->begin(); it != defaults->end();)
+		{
+			auto inherited = parent->second.find(it.key());
+			if (inherited != parent->second.end() && *inherited == *it)
+				it = defaults->erase(it);
+			else
+				++it;
+		}
+	}
+}
+
 std::vector<CSchemaSystemTypeScope*> GetTypeScopes()
 {
 	auto schemaSystem = Interfaces::schemaSystem;
@@ -301,6 +382,7 @@ bool Dump()
 	if (!FilesystemExporter::Dump(enums, classes))
 		return false;
 
+	RemoveInheritedDefaults(classes);
 	JsonExporter::Dump(enums, classes);
 	return true;
 }

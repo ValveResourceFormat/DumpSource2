@@ -140,6 +140,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MVDataPromoteField", MetadataValueType::INTEGER },
 	{ "MSaveBehavior", MetadataValueType::INTEGER },
 	{ "MPropertyFlattenStretchFactor", MetadataValueType::INTEGER },
+	{ "MPropertyResizable", MetadataValueType::INTEGER },
 
 	// FLOAT
 	{ "MNetworkMaxValue", MetadataValueType::FLOAT },

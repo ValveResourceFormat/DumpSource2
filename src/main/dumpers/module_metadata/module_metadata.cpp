@@ -62,12 +62,17 @@ static bool ExtractModuleMetadata(const CModule& module, void*& kv3)
 	return true;
 }
 
+// How SaveKV3AsJSON writes NaN and infinity, in this order so -nan is not matched as nan
+static constexpr std::string_view g_NonFiniteFloats[] = { "-nan", "nan", "-inf", "inf" };
+
+bool IsNonFiniteFloat(std::string_view text)
+{
+	return std::find(std::begin(g_NonFiniteFloats), std::end(g_NonFiniteFloats), text) != std::end(g_NonFiniteFloats);
+}
+
 // SaveKV3AsJSON writes NaN and infinity as bare words, which JSON has no value for, so they are quoted into strings
 static std::string QuoteNonFiniteFloats(std::string_view text)
 {
-	// In this order so -nan is not matched as nan
-	constexpr std::string_view nonFiniteFloats[] = { "-nan", "nan", "-inf", "inf" };
-
 	std::string result;
 	bool inString = false;
 
@@ -87,8 +92,8 @@ static std::string QuoteNonFiniteFloats(std::string_view text)
 		else
 		{
 			// Outside strings, only numbers and true/false/null are bare, none of which contain these
-			auto nonFinite = std::find_if(std::begin(nonFiniteFloats), std::end(nonFiniteFloats), [&](std::string_view word) { return text.substr(i, word.size()) == word; });
-			if (nonFinite != std::end(nonFiniteFloats))
+			auto nonFinite = std::find_if(std::begin(g_NonFiniteFloats), std::end(g_NonFiniteFloats), [&](std::string_view word) { return text.substr(i, word.size()) == word; });
+			if (nonFinite != std::end(g_NonFiniteFloats))
 			{
 				result += '"';
 				result += *nonFinite;

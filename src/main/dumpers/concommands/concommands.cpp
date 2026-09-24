@@ -569,7 +569,12 @@ static bool WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 
 		WriteHelp(name.c_str(), entry.m_Help.c_str(), output);
 
-		item["flags"] = flagNames;
+		// Flags that the declaring modules imply are left out, a few other modules set them too
+		std::erase_if(flagNames, [&](const std::string& flag) { return (flag == "gamedll" && modules.contains("server")) || (flag == "clientdll" && modules.contains("client")); });
+
+		// The text dumps keep them in bit order
+		std::sort(flagNames.begin(), flagNames.end());
+		item["flags"] = std::move(flagNames);
 		item["modules"] = modules;
 
 		// Some help texts end in a newline or space

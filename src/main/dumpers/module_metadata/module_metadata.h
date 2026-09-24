@@ -18,6 +18,7 @@
  */
 #pragma once
 
+#include <string_view>
 #include <nlohmann/json.hpp>
 
 class CModule;
@@ -31,7 +32,11 @@ bool Dump();
 // The module's metadata converted to JSON, null if the module has none, discarded if it could not be converted
 nlohmann::ordered_json GetJSON(const CModule& module);
 
-// Converts KV3 to JSON with tier0's SaveKV3AsJSON, discarded if it fails
+// Converts KV3 to JSON with tier0's SaveKV3AsJSON, discarded if it fails.
+// NaN and infinity are strings like "-nan", which JSON has no value for.
 nlohmann::ordered_json KV3ToJSON(void* kv3);
+
+// Whether a string from KV3ToJSON is a float that is NaN or infinity
+bool IsNonFiniteFloat(std::string_view text);
 
 } // namespace Dumpers::ModuleMetadata

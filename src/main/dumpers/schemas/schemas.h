@@ -40,6 +40,7 @@ struct IntermediateSchemaClassParent
 {
 	std::string name;
 	std::string module;
+	uint32_t offset; // Non-zero for the later bases of multiple inheritance
 };
 
 struct IntermediateSchemaClassField
@@ -55,6 +56,8 @@ struct IntermediateSchemaClass
 	std::string name;
 	std::string module;
 	int32_t size;
+	uint8_t alignment; // 255 when unknown, like for abstract classes
+	std::vector<std::string> flags;
 	std::vector<IntermediateMetadata> metadata;
 	std::vector<IntermediateSchemaClassParent> parents;
 	std::vector<IntermediateSchemaClassField> fields;

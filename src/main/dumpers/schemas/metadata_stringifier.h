@@ -54,6 +54,7 @@ extern std::map<std::string, std::string> g_unknownMetadataSamples;
 // Set when any KV3 defaults could not be parsed, which means the schemas should not be written
 extern bool g_bInvalidKV3Defaults;
 
-IntermediateMetadata GetMetadata(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName);
+// classInfo is the class the metadata is on or in, if any
+IntermediateMetadata GetMetadata(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName, const SchemaClassInfoData_t* classInfo = nullptr);
 
 } // namespace Dumpers::Schemas

@@ -132,12 +132,13 @@ static void ZeroHiddenDefaults(nlohmann::ordered_json& value, const std::unorder
 	}
 	else if (hidden)
 	{
-		if (value.is_string())
+		// Uninitialized floats can be NaN, which are strings
+		if (value.is_number_float() || (value.is_string() && ModuleMetadata::IsNonFiniteFloat(value.get_ref<const std::string&>())))
+			value = 0.0;
+		else if (value.is_string())
 			value = "";
 		else if (value.is_boolean())
 			value = false;
-		else if (value.is_number_float())
-			value = 0.0;
 		else if (value.is_number())
 			value = 0;
 	}
@@ -231,16 +232,43 @@ static std::string DescribeUnknownMetadata(const void* data)
 	return description;
 }
 
-// Joins the names that are set, some are -1 instead of null since the Deadlock 14/09/24 update
+// Some names are -1 instead of null since the Deadlock 14/09/24 update
+static bool IsNameSet(const char* name)
+{
+	return name != nullptr && name != reinterpret_cast<const char*>(-1);
+}
+
+// Joins the names that are set
 static std::string JoinNames(const char* first, std::string_view separator, const char* second)
 {
-	auto isSet = [](const char* name) { return name != nullptr && name != reinterpret_cast<const char*>(-1); };
-
-	if (isSet(first) && isSet(second))
+	if (IsNameSet(first) && IsNameSet(second))
 		return fmt::format("{}{}{}", first, separator, second);
 
-	return isSet(first) ? first : isSet(second) ? second
-	                                            : "";
+	if (IsNameSet(first))
+		return first;
+
+	return IsNameSet(second) ? second : "";
+}
+
+// The class that declares the field, the class itself or one of its bases
+static const char* FindFieldOwner(const SchemaClassInfoData_t* classInfo, const char* fieldName)
+{
+	if (!classInfo || !IsNameSet(fieldName))
+		return nullptr;
+
+	for (uint16_t i = 0; i < classInfo->m_nFieldCount; i++)
+	{
+		if (!strcmp(classInfo->m_pFields[i].m_pszName, fieldName))
+			return classInfo->m_pszName;
+	}
+
+	for (uint16_t i = 0; i < classInfo->m_nBaseClassCount; i++)
+	{
+		if (auto owner = FindFieldOwner(classInfo->m_pBaseClasses[i].m_pClass, fieldName))
+			return owner;
+	}
+
+	return nullptr;
 }
 
 static bool HasMetadataValue(const SchemaMetadataEntryData_t& entry)
@@ -253,7 +281,7 @@ static bool HasMetadataValue(const SchemaMetadataEntryData_t& entry)
 }
 
 // Determine how and if to output metadata entry value based on it's type.
-static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName, std::optional<nlohmann::json>& jsonValue)
+static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName, const SchemaClassInfoData_t* classInfo, std::optional<nlohmann::json>& jsonValue)
 {
 	if (!entry.m_pData)
 		return {};
@@ -315,9 +343,10 @@ static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData
 		}
 		case MetadataValueType::NETWORK_OVERRIDE:
 		{
-			// Written as "Class::field", or "field" when it's in the class itself
+			// Written as "Class::field". Without a class it's a field of the class or one of its bases.
 			auto value = static_cast<CSchemaNetworkOverride*>(entry.m_pData);
-			return fmt::format("\"{}\"", JoinNames(value->m_pszClassName, "::", value->m_pszFieldName));
+			auto className = IsNameSet(value->m_pszClassName) ? value->m_pszClassName : FindFieldOwner(classInfo, value->m_pszFieldName);
+			return fmt::format("\"{}\"", JoinNames(className, "::", value->m_pszFieldName));
 		}
 		case MetadataValueType::KV3DEFAULTS:
 			return GetKV3Defaults(entry, metadataTargetName, jsonValue);
@@ -326,10 +355,10 @@ static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData
 	return {};
 }
 
-IntermediateMetadata GetMetadata(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName)
+IntermediateMetadata GetMetadata(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName, const SchemaClassInfoData_t* classInfo)
 {
 	IntermediateMetadata metadata{ .name = entry.m_pszName, .hasValue = HasMetadataValue(entry) };
-	metadata.stringValue = GetMetadataValue(entry, metadataTargetName, metadata.jsonValue);
+	metadata.stringValue = GetMetadataValue(entry, metadataTargetName, classInfo, metadata.jsonValue);
 	return metadata;
 }
 
