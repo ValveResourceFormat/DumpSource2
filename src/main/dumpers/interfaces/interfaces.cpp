@@ -18,7 +18,6 @@
  */
 
 #include "interfaces.h"
-#include "gamedata.h"
 #include "globalvariables.h"
 #include "modules.h"
 #include <interfaces/interfaces.h>
@@ -32,8 +31,6 @@
 namespace Dumpers::Interfaces
 {
 
-using namespace GameData;
-
 // Returns false if a module exports CreateInterface but its interface list could not be found
 bool Dump()
 {
@@ -41,21 +38,21 @@ bool Dump()
 	std::map<std::string, std::set<std::string>> interfaces;
 	std::string failed;
 
-	std::vector<CModule*> modules = { Modules::tier0.get(), Modules::schemaSystem.get() };
-	for (auto& module : Modules::allModules)
+	std::vector<const CModule*> modules = { Modules::tier0.get(), Modules::schemaSystem.get() };
+	for (const auto& module : Modules::allModules)
 		modules.push_back(&module);
 
 	for (auto module : modules)
 	{
-		if (!dlsym(module->m_hModule, "CreateInterface"))
+		auto createInterface = dlsym(module->m_hModule, "CreateInterface");
+		if (!createInterface)
 			continue;
 
-		int error;
-		auto match = (uint8_t*)module->FindSignature(g_CreateInterfaceSignature, sizeof(g_CreateInterfaceSignature) - 1, error);
-
-		// Registrations are static objects in the module, so anything else means the layout changed
-		auto regs = match ? *Modules::GetGlobalFromSignatureMatch<InterfaceReg*>(match) : nullptr;
-		bool valid = error == SIG_OK && regs != nullptr;
+		// CreateInterface walks the InterfaceReg list, and its first instruction loads the list head.
+		// The head and registrations are static objects in the module, so anything else means the code changed.
+		auto head = Modules::GetGlobalFromSignatureMatch<InterfaceReg*>(createInterface);
+		auto regs = Modules::IsInModule(*module, head) ? *head : nullptr;
+		bool valid = regs != nullptr;
 		std::set<std::string> names;
 
 		for (auto reg = regs; valid && reg; reg = reg->m_pNext)
@@ -76,7 +73,7 @@ bool Dump()
 
 	if (!failed.empty())
 	{
-		spdlog::critical("Could not read the interface list from CreateInterface of {}, update the signature in gamedata.h. Not writing interfaces.txt", failed);
+		spdlog::critical("Could not read the interface list from CreateInterface of {}, not writing interfaces.txt", failed);
 		return false;
 	}
 

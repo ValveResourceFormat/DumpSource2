@@ -164,17 +164,17 @@ struct ConCommandRegList
 	ConCommandRegList* m_pPrev;
 };
 
-static_assert(sizeof(ConVarRegList) == 0x3E90, "List size is part of g_ConVarQueueSignature");
-static_assert(sizeof(ConCommandRegList) == 0x1910, "List size is part of g_ConCommandQueueSignature");
+static_assert(sizeof(ConVarRegList) == 0x3E90, "List size is part of the Linux g_ConVarQueueSignature");
+static_assert(sizeof(ConCommandRegList) == 0x1910, "List size is part of the Linux g_ConCommandQueueSignature");
 
 // Signatures of the list append code, starting at the list head load.
 // To update, find the list allocation (sizeof(ConVarRegList)) in tier0. The code is only linked into modules that declare any.
 #ifdef _WIN32
-inline const byte g_ConVarQueueSignature[] = "\x4C\x8B\x0D\x2A\x2A\x2A\x2A\x4D\x85\xC9\x74\x2A\x45\x8B\x01\x41\x83\xF8\x64\x0F\x85\x2A\x2A\x2A\x2A\xB9\x90\x3E\x00\x00";
-inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x0D\x2A\x2A\x2A\x2A\x48\x85\xC9\x74\x2A\x44\x8B\x01\x41\x83\xF8\x64\x75\x2A\xB9\x10\x19\x00\x00";
+inline const byte g_ConVarQueueSignature[] = "\x4C\x8B\x0D\x2A\x2A\x2A\x2A\x4D\x85\xC9\x74\x2A\x45\x8B\x01\x41\x83\xF8\x64";
+inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x0D\x2A\x2A\x2A\x2A\x48\x85\xC9\x74\x2A\x44\x8B\x01\x41\x83\xF8\x64";
 #else
-inline const byte g_ConVarQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\xC7\x00\x00\x00\x00\x00\xB9\x01\x00\x00\x00\x48\x89\x05\x2A\x2A\x2A\x2A\x48\x89\x90\x88\x3E\x00\x00";
-inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\xC7\x00\x00\x00\x00\x00\xB9\x01\x00\x00\x00\x48\x89\x05\x2A\x2A\x2A\x2A\x48\x89\x90\x08\x19\x00\x00";
+inline const byte g_ConVarQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\xC7\x00\x00\x00\x00\x00\xB9\x01\x00\x00\x00\x48\x89\x05\x2A\x2A\x2A\x2A\x48\x89\x90\x88\x3E";
+inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\xC7\x00\x00\x00\x00\x00\xB9\x01\x00\x00\x00\x48\x89\x05\x2A\x2A\x2A\x2A\x48\x89\x90\x08\x19";
 #endif
 
 // Modules that always declare both, not finding their queues means the signatures are outdated
@@ -189,22 +189,12 @@ inline const std::unordered_set<std::string> g_RequiredQueueModules = { "tier0",
 // starting at the list head load.
 // To update, find the xref to the "entity_api_designname_to_base" string in server.
 #ifdef _WIN32
-inline const byte g_EntityClassListSignature[] = "\x48\x8B\x35\x2A\x2A\x2A\x2A\x33\xED\x4C\x8B\xFA\x48\x85\xF6\x0F\x84\x2A\x2A\x2A\x2A\x48\x89\x5C\x24\x2A\x48\x89\x7C\x24\x2A\x4C\x89\x64\x24\x2A\x4C\x8D\x25";
+inline const byte g_EntityClassListSignature[] = "\x48\x8B\x35\x2A\x2A\x2A\x2A\x33\xED\x4C\x8B\xFA\x48\x85\xF6";
 #else
-inline const byte g_EntityClassListSignature[] = "\x48\x8B\x1D\x2A\x2A\x2A\x2A\x48\x89\x75\xB0\x48\x85\xDB\x0F\x84\x2A\x2A\x2A\x2A\x4C\x8D\x45\xC0\x45\x31\xFF\x4D\x89\xC4";
+inline const byte g_EntityClassListSignature[] = "\x48\x8B\x1D\x2A\x2A\x2A\x2A\x48\x89\x75\xB0\x48\x85\xDB";
 #endif
 
 // Modules that always link entities, not finding their list means the signature is outdated
 inline const std::unordered_set<std::string> g_RequiredEntityModules = { "client", "server" };
-
-//-----------------------------------------------------------------------------
-// Interfaces
-//-----------------------------------------------------------------------------
-
-// Signature of CreateInterface, which walks the module's InterfaceReg list, starting at the list head load.
-// It comes from the statically linked interfaces library, so it's the same in every module.
-#ifdef _WIN32
-inline const byte g_CreateInterfaceSignature[] = "\x4C\x8B\x0D\x2A\x2A\x2A\x2A\x4C\x8B\xD2\x4C\x8B\xD9\x4D\x85\xC9\x74\x2A\x49\x8B\x41\x08";
-#endif
 
 } // namespace GameData
