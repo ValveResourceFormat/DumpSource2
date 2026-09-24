@@ -22,6 +22,7 @@
 
 #include "globalvariables.h"
 #include "interfaces.h"
+#include <algorithm>
 #include <filesystem>
 #include <map>
 #include <unordered_set>
@@ -141,6 +142,38 @@ static void* CallKV3Defaults(GetKV3DefaultsFn fn)
 }
 #endif
 
+std::map<std::string, std::string> g_unknownMetadataSamples;
+
+// Describes a value of metadata missing from metadatalist.h, to help pick its type when adding it
+static std::string DescribeUnknownMetadata(const void* data)
+{
+	auto bytes = static_cast<const uint8_t*>(data);
+	auto pointer = *static_cast<const uint8_t* const*>(data);
+
+	std::string description = "bytes";
+	for (int i = 0; i < 8; i++)
+		description += fmt::format(" {:02x}", bytes[i]);
+	description += fmt::format(", as int {}, as float {}", *static_cast<const int32_t*>(data), *static_cast<const float*>(data));
+
+	for (const auto& module : Modules::allModules)
+	{
+		for (const auto& section : module.m_sections)
+		{
+			auto base = static_cast<const uint8_t*>(section.m_pBase);
+			if (pointer < base || pointer >= base + section.m_iSize)
+				continue;
+
+			if (section.m_szName == ".text")
+				return description + fmt::format(", points to code in {}", module.m_pszModule);
+
+			auto length = strnlen(reinterpret_cast<const char*>(pointer), std::min<size_t>(base + section.m_iSize - pointer, 60));
+			return description + fmt::format(", points to {} in {}: \"{}\"", section.m_szName, module.m_pszModule, std::string(reinterpret_cast<const char*>(pointer), length));
+		}
+	}
+
+	return description;
+}
+
 bool HasMetadataValue(const SchemaMetadataEntryData_t& entry)
 {
 	if (!entry.m_pData)
@@ -158,7 +191,12 @@ std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& ent
 
 	auto valueType = g_mapMetadataNameToValue.find(entry.m_pszName);
 	if (valueType == g_mapMetadataNameToValue.end())
+	{
+		if (!g_unknownMetadataSamples.contains(entry.m_pszName))
+			g_unknownMetadataSamples[entry.m_pszName] = fmt::format("on {}: {}", metadataTargetName, DescribeUnknownMetadata(entry.m_pData));
+
 		return {};
+	}
 
 	switch (valueType->second)
 	{

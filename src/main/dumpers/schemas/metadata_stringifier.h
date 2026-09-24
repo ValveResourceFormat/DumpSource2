@@ -20,6 +20,7 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #pragma once
+#include <map>
 #include <optional>
 #include <string>
 #include <schemasystem/schematypes.h>
@@ -40,6 +41,9 @@ struct CSchemaSendProxyRecipientsFilter
 
 namespace Dumpers::Schemas
 {
+
+// First value of each metadata missing from metadatalist.h, described to help pick its type
+extern std::map<std::string, std::string> g_unknownMetadataSamples;
 
 bool HasMetadataValue(const SchemaMetadataEntryData_t& entry);
 std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName);

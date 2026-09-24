@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <optional>
 #include <spdlog/spdlog.h>
+#include "metadata_stringifier.h"
 
 namespace Dumpers::Schemas::FilesystemExporter
 {
@@ -191,7 +192,7 @@ void Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<In
 	DumpEnums(enums, schemaPath, foundFiles);
 
 	for (const auto& [name, count] : g_unknownMetadataCounts)
-		spdlog::warn("Metadata '{}' has unknown value for parser ({} usages)", name, count);
+		spdlog::warn("Metadata '{}' is not in metadatalist.h ({} usages), value {}", name, count, g_unknownMetadataSamples[name]);
 
 	for (const auto& entry : std::filesystem::directory_iterator(schemaPath))
 	{
