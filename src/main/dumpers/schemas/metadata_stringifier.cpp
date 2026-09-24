@@ -141,124 +141,143 @@ static void* CallKV3Defaults(GetKV3DefaultsFn fn)
 }
 #endif
 
+bool HasMetadataValue(const SchemaMetadataEntryData_t& entry)
+{
+	if (!entry.m_pData)
+		return false;
+
+	auto it = g_mapMetadataNameToValue.find(entry.m_pszName);
+	return it == g_mapMetadataNameToValue.end() || it->second != MetadataValueType::FUNCTION;
+}
+
 // Determine how and if to output metadata entry value based on it's type.
 std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName)
 {
-	if (entry.m_pData && g_mapMetadataNameToValue.find(entry.m_pszName) != g_mapMetadataNameToValue.end())
+	if (!entry.m_pData)
+		return {};
+
+	auto valueType = g_mapMetadataNameToValue.find(entry.m_pszName);
+	if (valueType == g_mapMetadataNameToValue.end())
+		return {};
+
+	switch (valueType->second)
 	{
-		auto valueType = g_mapMetadataNameToValue.at(entry.m_pszName);
-		switch (valueType)
+		case MetadataValueType::STRING:
 		{
-			case MetadataValueType::STRING:
+			auto value = *static_cast<const char**>(entry.m_pData);
+			if (value)
 			{
-				auto value = *static_cast<const char**>(entry.m_pData);
-				if (value)
+				Globals::stringsIgnoreStream << value << "\n";
+			}
+			return fmt::format("\"{}\"", value ? value : "(NULL)");
+		}
+		case MetadataValueType::INTEGER:
+			return std::to_string(*static_cast<int*>(entry.m_pData));
+		case MetadataValueType::FLOAT:
+			return std::to_string(*static_cast<float*>(entry.m_pData));
+		case MetadataValueType::BOOL:
+			return *static_cast<bool*>(entry.m_pData) ? "true" : "false";
+		case MetadataValueType::COLOR:
+		{
+			auto color = static_cast<const uint8_t*>(entry.m_pData);
+			return fmt::format("[{}, {}, {}, {}]", color[0], color[1], color[2], color[3]);
+		}
+		case MetadataValueType::INLINE_STRING:
+		{
+			// max 8 characters. Also check for null term.
+			char* result = static_cast<char*>(entry.m_pData);
+			for (uint8_t i = 0; i < 8; ++i)
+			{
+				if (result[i] == '\0')
 				{
-					Globals::stringsIgnoreStream << value << "\n";
+					return fmt::format("\"{}\"", std::string(result, i));
 				}
-				return fmt::format("\"{}\"", value ? value : "(NULL)");
 			}
-			case MetadataValueType::INTEGER:
-				return std::to_string(*static_cast<int*>(entry.m_pData));
-			case MetadataValueType::FLOAT:
-				return std::to_string(*static_cast<float*>(entry.m_pData));
-			case MetadataValueType::INLINE_STRING:
+			return fmt::format("\"{}\"", std::string(result, 8));
+		}
+		case MetadataValueType::SEND_PROXY_RECIPIENTS_FILTER:
+		{
+			auto& value = *static_cast<CSchemaSendProxyRecipientsFilter*>(entry.m_pData);
+			return fmt::format("\"{}\"", value.m_pszName ? value.m_pszName : "(NULL)");
+		}
+		case MetadataValueType::VARNAME:
+		{
+			auto value = static_cast<CSchemaVarName*>(entry.m_pData);
+
+			const auto check_ptr = [](const char* ptr) -> bool {
+				// Authored: source2gen
+				// @note: hotfix for the deadlock 14/09/24 update,
+				// where they filled some ptrs with -1 instead of nullptr
+				return ptr != nullptr && ptr != reinterpret_cast<const char*>(-1);
+			};
+
+			std::stringstream stringStream;
+			auto hasType = check_ptr(value->m_pszType);
+			auto hasName = check_ptr(value->m_pszName);
+
+			stringStream << "\"";
+
+			if (hasType)
+				stringStream << value->m_pszType;
+
+			if (hasName)
 			{
-				// max 8 characters. Also check for null term.
-				char* result = static_cast<char*>(entry.m_pData);
-				for (uint8_t i = 0; i < 8; ++i)
-				{
-					if (result[i] == '\0')
-					{
-						return fmt::format("\"{}\"", std::string(result, i));
-					}
-				}
-				return fmt::format("\"{}\"", std::string(result, 8));
-			}
-			case MetadataValueType::SEND_PROXY_RECIPIENTS_FILTER:
-			{
-				auto& value = *static_cast<CSchemaSendProxyRecipientsFilter*>(entry.m_pData);
-				return fmt::format("\"{}\"", value.m_pszName ? value.m_pszName : "(NULL)");
-			}
-			case MetadataValueType::VARNAME:
-			{
-				auto value = static_cast<CSchemaVarName*>(entry.m_pData);
-
-				const auto check_ptr = [](const char* ptr) -> bool {
-					// Authored: source2gen
-					// @note: hotfix for the deadlock 14/09/24 update,
-					// where they filled some ptrs with -1 instead of nullptr
-					return ptr != nullptr && ptr != reinterpret_cast<const char*>(-1);
-				};
-
-				std::stringstream stringStream;
-				auto hasType = check_ptr(value->m_pszType);
-				auto hasName = check_ptr(value->m_pszName);
-
-				stringStream << "\"";
-
 				if (hasType)
-					stringStream << value->m_pszType;
-
-				if (hasName)
-				{
-					if (hasType)
-						stringStream << " ";
-					stringStream << value->m_pszName;
-				}
-
-				stringStream << "\"";
-
-				return stringStream.str();
+					stringStream << " ";
+				stringStream << value->m_pszName;
 			}
-			case MetadataValueType::KV3DEFAULTS:
-			{
-				typedef int (*SaveKV3AsJsonFn)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
 
-				if (!entry.m_pData || !(*(void**)entry.m_pData) || g_classWithBrokenDefaults.contains(metadataTargetName))
-					return "Could not parse KV3 Defaults";
+			stringStream << "\"";
 
-				auto value = CallKV3Defaults(reinterpret_cast<GetKV3DefaultsFn>(*(void**)entry.m_pData));
+			return stringStream.str();
+		}
+		case MetadataValueType::KV3DEFAULTS:
+		{
+			typedef int (*SaveKV3AsJsonFn)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
 
-				if (!value)
-					return "Could not parse KV3 Defaults";
-
-#ifdef WIN32
-				static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>("?SaveKV3AsJSON@@YA_NPEBVKeyValues3@@PEAVCUtlString@@1@Z");
-#else
-				static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>("_Z13SaveKV3AsJSONPK10KeyValues3P10CUtlStringS3_");
-#endif
-				if (!SaveKV3AsJson)
-				{
-					spdlog::critical("SaveKV3AsJson not found");
-					return {};
-				}
-
-				SimpleCUtlString err;
-				SimpleCUtlString buf;
-				int res = SaveKV3AsJson(*(void**)value, err, buf);
-
-				if (res)
-				{
-					std::string out = buf.Get();
-
-					for (const auto& regex : g_regexFilters)
-					{
-						out = std::regex_replace(out, regex, "$1 <HIDDEN FOR DIFF>,");
-					}
-
-					return out;
-				}
-
+			if (!(*(void**)entry.m_pData) || g_classWithBrokenDefaults.contains(metadataTargetName))
 				return "Could not parse KV3 Defaults";
-			}
-			case MetadataValueType::DEBUGGER_BREAKPOINT:
-			{
+
+			auto value = CallKV3Defaults(reinterpret_cast<GetKV3DefaultsFn>(*(void**)entry.m_pData));
+
+			if (!value)
+				return "Could not parse KV3 Defaults";
+
 #ifdef WIN32
-				__debugbreak();
+			static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>("?SaveKV3AsJSON@@YA_NPEBVKeyValues3@@PEAVCUtlString@@1@Z");
+#else
+			static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>("_Z13SaveKV3AsJSONPK10KeyValues3P10CUtlStringS3_");
 #endif
-				return "DEBUGGING";
+			if (!SaveKV3AsJson)
+			{
+				spdlog::critical("SaveKV3AsJson not found");
+				return {};
 			}
+
+			SimpleCUtlString err;
+			SimpleCUtlString buf;
+			int res = SaveKV3AsJson(*(void**)value, err, buf);
+
+			if (res)
+			{
+				std::string out = buf.Get();
+
+				for (const auto& regex : g_regexFilters)
+				{
+					out = std::regex_replace(out, regex, "$1 <HIDDEN FOR DIFF>,");
+				}
+
+				return out;
+			}
+
+			return "Could not parse KV3 Defaults";
+		}
+		case MetadataValueType::DEBUGGER_BREAKPOINT:
+		{
+#ifdef WIN32
+			__debugbreak();
+#endif
+			return "DEBUGGING";
 		}
 	}
 

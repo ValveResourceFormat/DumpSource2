@@ -59,7 +59,7 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSche
 		for (uint16_t k = 0; k < classInfo->m_nStaticMetadataCount; k++)
 		{
 			const auto& metadataEntry = classInfo->m_pStaticMetadata[k];
-			schemaClass.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, classInfo->m_pszName), metadataEntry.m_pData);
+			schemaClass.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, classInfo->m_pszName), HasMetadataValue(metadataEntry));
 		}
 
 		if (classInfo->m_nBaseClassCount > 0)
@@ -88,7 +88,7 @@ void DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSche
 			for (uint16_t l = 0; l < field.m_nStaticMetadataCount; l++)
 			{
 				const auto& metadataEntry = field.m_pStaticMetadata[l];
-				intermediateField.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, classInfo->m_pszName), metadataEntry.m_pData);
+				intermediateField.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, classInfo->m_pszName), HasMetadataValue(metadataEntry));
 			}
 
 			schemaClass.fields.push_back(std::move(intermediateField));
@@ -133,7 +133,7 @@ void DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchema
 		for (uint16_t k = 0; k < enumInfo->m_nStaticMetadataCount; k++)
 		{
 			const auto& metadataEntry = enumInfo->m_pStaticMetadata[k];
-			schemaEnum.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, enumInfo->m_pszName), metadataEntry.m_pData);
+			schemaEnum.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, enumInfo->m_pszName), HasMetadataValue(metadataEntry));
 		}
 
 		for (uint16_t k = 0; k < enumInfo->m_nEnumeratorCount; k++)
@@ -148,7 +148,7 @@ void DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchema
 			for (uint16_t l = 0; l < field.m_nStaticMetadataCount; l++)
 			{
 				const auto& metadataEntry = field.m_pStaticMetadata[l];
-				member.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, enumInfo->m_pszName), metadataEntry.m_pData);
+				member.metadata.emplace_back(std::string(metadataEntry.m_pszName), GetMetadataValue(metadataEntry, enumInfo->m_pszName), HasMetadataValue(metadataEntry));
 			}
 
 			schemaEnum.members.push_back(std::move(member));

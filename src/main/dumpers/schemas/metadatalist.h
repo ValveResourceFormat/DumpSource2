@@ -33,6 +33,9 @@ enum class MetadataValueType {
 	INLINE_STRING,
 	INTEGER,
 	FLOAT,
+	BOOL,
+	COLOR,
+	FUNCTION,
 	VARNAME,
 	KV3DEFAULTS,
 	SEND_PROXY_RECIPIENTS_FILTER,
@@ -106,6 +109,13 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue
 	{ "MVDataOutlinerNameExpr", MetadataValueType::STRING },
 	{ "MVDataPreviewWidget", MetadataValueType::STRING },
 	{ "MWorkshopEnumeratorTagName", MetadataValueType::STRING },
+	{ "MVDataComponentRequiresAncestor", MetadataValueType::STRING },
+	{ "MVDataComponentValidGrandParents", MetadataValueType::STRING },
+	{ "MVDataExperimentalNodeSet", MetadataValueType::STRING },
+	{ "MVDataGroupNodeClass", MetadataValueType::STRING },
+	{ "MPulseEditorHeaderHelper", MetadataValueType::STRING },
+	{ "MVDataOutlinerAssetNameExpr", MetadataValueType::STRING },
+	{ "MWorkshopEnumeratorColor", MetadataValueType::STRING },
 
 	// INLINE STRING
 	{ "MDiskDataForResourceType", MetadataValueType::INLINE_STRING },
@@ -128,10 +138,33 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue
 	{ "MVDataNodeType", MetadataValueType::INTEGER },
 	{ "MVDataOverlayType", MetadataValueType::INTEGER },
 	{ "MVDataPromoteField", MetadataValueType::INTEGER },
+	{ "MSaveBehavior", MetadataValueType::INTEGER },
+	{ "MPropertyFlattenStretchFactor", MetadataValueType::INTEGER },
 
 	// FLOAT
 	{ "MNetworkMaxValue", MetadataValueType::FLOAT },
 	{ "MNetworkMinValue", MetadataValueType::FLOAT },
+
+	// BOOL
+	{ "MVDataOutlinerDefaultExpanded", MetadataValueType::BOOL },
+
+	// COLOR
+	{ "MVDataNodeTintColor", MetadataValueType::COLOR },
+
+	// FUNCTION, pointers to code that have no printable value
+	{ "MDebugSnapshotDataRenderFn", MetadataValueType::FUNCTION },
+	{ "MDebugSnapshotDataSummaryFn", MetadataValueType::FUNCTION },
+	{ "MPropertyAttrStateCallback", MetadataValueType::FUNCTION },
+	{ "MPropertyElementNameFn", MetadataValueType::FUNCTION },
+	{ "MPropertyLeafChoiceProviderFn", MetadataValueType::FUNCTION },
+	{ "MPropertyLeafSuggestionProviderFn", MetadataValueType::FUNCTION },
+	{ "MPropertyMapKeyLeafChoiceProviderFn", MetadataValueType::FUNCTION },
+	{ "MVDataOutlinerLeafColorFn", MetadataValueType::FUNCTION },
+	{ "MVDataOutlinerLeafDetailFn", MetadataValueType::FUNCTION },
+	{ "MVDataOutlinerLeafNameFn", MetadataValueType::FUNCTION },
+	{ "MVDataPostSaveFixupFn", MetadataValueType::FUNCTION },
+	{ "MVDataPreLoadFixupFn", MetadataValueType::FUNCTION },
+	{ "MVDataVirtualNodeFactoryFn", MetadataValueType::FUNCTION },
 
 	// VARNAME
 	{ "MNetworkOverride", MetadataValueType::VARNAME },

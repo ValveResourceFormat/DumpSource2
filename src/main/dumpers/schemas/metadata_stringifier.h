@@ -41,6 +41,7 @@ struct CSchemaSendProxyRecipientsFilter
 namespace Dumpers::Schemas
 {
 
+bool HasMetadataValue(const SchemaMetadataEntryData_t& entry);
 std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName);
 
 } // namespace Dumpers::Schemas
