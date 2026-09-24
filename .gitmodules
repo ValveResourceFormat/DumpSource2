@@ -5,7 +5,7 @@
 	shallow = true
 [submodule "vendor/hl2sdk-dota"]
 	path = vendor/hl2sdk-dota
-	url = https://github.com/Poggicek/hl2sdk
+	url = https://github.com/alliedmodders/hl2sdk
 	branch = dota
 	shallow = true
 [submodule "vendor/hl2sdk-deadlock"]

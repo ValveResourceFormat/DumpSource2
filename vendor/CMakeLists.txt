@@ -18,24 +18,31 @@ function(BUILD_HL2SDK GAME GAME_PATH)
 
 		add_library(HL2SDK-${GAME} STATIC
 			${GAME_PATH}/tier1/convar.cpp
-			${GAME_PATH}/tier1/generichash.cpp
 			${GAME_PATH}/tier1/keyvalues3.cpp
 		)
+
+		# Newer SDKs made tier1 header only
+		if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${GAME_PATH}/tier1/generichash.cpp)
+			target_sources(HL2SDK-${GAME} PRIVATE ${GAME_PATH}/tier1/generichash.cpp)
+		endif()
 
 		target_include_directories(HL2SDK-${GAME} PUBLIC ${HL2SDK_INCLUDES})
 
 		if(WIN32)
-			target_link_libraries(HL2SDK-${GAME} PUBLIC
-				${CMAKE_CURRENT_SOURCE_DIR}/${GAME_PATH}/lib/public/win64/tier1.lib
-				${CMAKE_CURRENT_SOURCE_DIR}/${GAME_PATH}/lib/public/win64/interfaces.lib
-				${CMAKE_CURRENT_SOURCE_DIR}/${GAME_PATH}/lib/public/win64/mathlib.lib
-			)
+			set(HL2SDK_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/${GAME_PATH}/lib/public/win64)
+			set(HL2SDK_LIB_EXT lib)
 		elseif(UNIX)
-			target_link_libraries(HL2SDK-${GAME} PUBLIC
-				${CMAKE_CURRENT_SOURCE_DIR}/${GAME_PATH}/lib/linux64/tier1.a
-				${CMAKE_CURRENT_SOURCE_DIR}/${GAME_PATH}/lib/linux64/interfaces.a
-				${CMAKE_CURRENT_SOURCE_DIR}/${GAME_PATH}/lib/linux64/mathlib.a
-			)
+			set(HL2SDK_LIBS ${CMAKE_CURRENT_SOURCE_DIR}/${GAME_PATH}/lib/linux64)
+			set(HL2SDK_LIB_EXT a)
+		endif()
+
+		target_link_libraries(HL2SDK-${GAME} PUBLIC
+			${HL2SDK_LIBS}/interfaces.${HL2SDK_LIB_EXT}
+			${HL2SDK_LIBS}/mathlib.${HL2SDK_LIB_EXT}
+		)
+
+		if(EXISTS ${HL2SDK_LIBS}/tier1.${HL2SDK_LIB_EXT})
+			target_link_libraries(HL2SDK-${GAME} PUBLIC ${HL2SDK_LIBS}/tier1.${HL2SDK_LIB_EXT})
 		endif()
 		message(STATUS "Setting up HL2SDK-${GAME}") # What does this print?
 endfunction()
