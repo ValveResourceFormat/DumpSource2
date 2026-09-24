@@ -18,9 +18,12 @@
  */
 #pragma once
 
+class CModule;
+
 namespace Dumpers::ConCommands
 {
 
-void Dump();
+void CollectQueues(CModule& module);
+bool Dump();
 
 } // namespace Dumpers::ConCommands

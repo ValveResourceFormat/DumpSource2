@@ -35,6 +35,12 @@ void Usage()
 	printf("Usage: DumpSource2 <output path>\n");
 }
 
+void WriteStringsIgnore()
+{
+	std::ofstream file(Globals::outputPath / ".stringsignore");
+	file << Globals::stringsIgnoreStream.str();
+}
+
 int main(int argc, char** argv)
 {
 	spdlog::cfg::load_env_levels("LOGLEVEL");
@@ -79,23 +85,37 @@ int main(int argc, char** argv)
 		}
 	}
 
-	InitializeCoreModules();
-	InitializeAppSystems();
+	// Each part is dumped independently, so one of them breaking does not lose the others
+	int exitCode = 0;
 
-	Dumpers::ConCommands::Dump();
-	Dumpers::Schemas::Dump();
-	Dumpers::ModuleMetadata::Dump();
+	InitializeModules();
 
-	std::ofstream file(Globals::outputPath / ".stringsignore");
-	file << Globals::stringsIgnoreStream.str();
-	file.close();
+	if (!Dumpers::ConCommands::Dump())
+		exitCode = 1;
 
-	spdlog::info("Dumped successfully");
+	WriteStringsIgnore();
+
+	if (InitializeSchemas())
+	{
+		Dumpers::Schemas::Dump();
+		Dumpers::ModuleMetadata::Dump();
+		WriteStringsIgnore();
+	}
+	else
+	{
+		spdlog::critical("Not writing schemas or module metadata, see above");
+		exitCode = 1;
+	}
+
+	if (exitCode == 0)
+		spdlog::info("Dumped successfully");
+	else
+		spdlog::critical("Dump is incomplete, exiting with code {}", exitCode);
 
 	// skips atexit calls that cause a segfault only while unregistering cvar callbacks
 #ifdef WIN32
-	TerminateProcess(GetCurrentProcess(), 0);
+	TerminateProcess(GetCurrentProcess(), exitCode);
 #else
-	_Exit(0);
+	_Exit(exitCode);
 #endif
 }

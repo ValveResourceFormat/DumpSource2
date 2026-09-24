@@ -18,5 +18,5 @@
  */
 #pragma once
 
-void InitializeCoreModules();
-void InitializeAppSystems();
+void InitializeModules();
+bool InitializeSchemas();
