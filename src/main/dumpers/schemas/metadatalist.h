@@ -37,6 +37,12 @@ enum class MetadataValueType
 	COLOR,
 	FUNCTION,
 	KV3DEFAULTS,
+#ifdef GAME_HLVR
+	FLOAT,
+	VARNAME,
+	NETWORK_OVERRIDE,
+	USER_GROUP_SEND_PROXY_RECIPIENTS_FILTER,
+#endif
 };
 
 inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
@@ -44,12 +50,14 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MAlternateSemanticName", MetadataValueType::STRING },
 	{ "MCellForDomain", MetadataValueType::STRING },
 	{ "MCustomFGDMetadata", MetadataValueType::STRING },
+	{ "MDefaultString", MetadataValueType::STRING },
 	{ "MEntitySubclassScopeFile", MetadataValueType::STRING },
 	{ "MFgdHelper", MetadataValueType::STRING },
 	{ "MFieldVerificationName", MetadataValueType::STRING },
 	{ "MKV3TransferName", MetadataValueType::STRING },
 	{ "MParticleReplacementOp", MetadataValueType::STRING },
 	{ "MPropertyArrayElementNameKey", MetadataValueType::STRING },
+	{ "MPropertyAttributeChoiceEnumName", MetadataValueType::STRING },
 	{ "MPropertyAttributeChoiceName", MetadataValueType::STRING },
 	{ "MPropertyAttributeEditor", MetadataValueType::STRING },
 	{ "MPropertyAttributeRange", MetadataValueType::STRING },
@@ -57,6 +65,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MPropertyCustomEditor", MetadataValueType::STRING },
 	{ "MPropertyCustomFGDType", MetadataValueType::STRING },
 	{ "MPropertyDescription", MetadataValueType::STRING },
+	{ "MPropertyEditClassCustomEditor", MetadataValueType::STRING },
 	{ "MPropertyExtendedEditor", MetadataValueType::STRING },
 	{ "MPropertyFriendlyName", MetadataValueType::STRING },
 	{ "MPropertyGroupName", MetadataValueType::STRING },
@@ -130,7 +139,11 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	// FUNCTION, pointers to code that have no printable value
 	{ "MDebugSnapshotDataRenderFn", MetadataValueType::FUNCTION },
 	{ "MDebugSnapshotDataSummaryFn", MetadataValueType::FUNCTION },
+	{ "MParticleCustomFieldDefaultValue", MetadataValueType::FUNCTION },
+	{ "MPropertyAttrChangeCallback", MetadataValueType::FUNCTION },
 	{ "MPropertyAttrStateCallback", MetadataValueType::FUNCTION },
+	{ "MPropertyChoiceProviderFn", MetadataValueType::FUNCTION },
+	{ "MPropertyEditClassAsString", MetadataValueType::FUNCTION },
 	{ "MPropertyElementNameFn", MetadataValueType::FUNCTION },
 	{ "MPropertyLeafChoiceProviderFn", MetadataValueType::FUNCTION },
 	{ "MPropertyLeafSuggestionProviderFn", MetadataValueType::FUNCTION },
@@ -144,6 +157,35 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 
 	// KV3
 	{ "MGetKV3ClassDefaults", MetadataValueType::KV3DEFAULTS },
+
+#ifdef GAME_HLVR
+	// Network metadata, which older games keep in their schemas
+	{ "MNetworkAlias", MetadataValueType::STRING },
+	{ "MNetworkChangeCallback", MetadataValueType::STRING },
+	{ "MNetworkChangePointerCallback", MetadataValueType::STRING },
+	{ "MNetworkEncoder", MetadataValueType::STRING },
+	{ "MNetworkExcludeByName", MetadataValueType::STRING },
+	{ "MNetworkExcludeByUserGroup", MetadataValueType::STRING },
+	{ "MNetworkIncludeByName", MetadataValueType::STRING },
+	{ "MNetworkIncludeByUserGroup", MetadataValueType::STRING },
+	{ "MNetworkReplayCompatField", MetadataValueType::STRING },
+	{ "MNetworkSerializer", MetadataValueType::STRING },
+	{ "MNetworkTypeAlias", MetadataValueType::STRING },
+	{ "MNetworkUserGroup", MetadataValueType::STRING },
+	{ "MNetworkUserGroupProxy", MetadataValueType::STRING },
+	{ "MNetworkBitCount", MetadataValueType::INTEGER },
+	{ "MNetworkEncodeFlags", MetadataValueType::INTEGER },
+	{ "MNetworkPriority", MetadataValueType::INTEGER },
+	{ "MNetworkVarEmbeddedFieldOffsetDelta", MetadataValueType::INTEGER },
+	{ "MNetworkMaxValue", MetadataValueType::FLOAT },
+	{ "MNetworkMinValue", MetadataValueType::FLOAT },
+	{ "MNetworkVarNames", MetadataValueType::VARNAME },
+	{ "MNetworkVarTypeOverride", MetadataValueType::VARNAME },
+	{ "MNetworkOverride", MetadataValueType::NETWORK_OVERRIDE },
+	// Only the filter function in Half-Life: Alyx
+	{ "MNetworkSendProxyRecipientsFilter", MetadataValueType::FUNCTION },
+	{ "MNetworkUserGroupSendProxyRecipientsFilter", MetadataValueType::USER_GROUP_SEND_PROXY_RECIPIENTS_FILTER },
+#endif
 };
 
 } // namespace Dumpers::Schemas

@@ -52,6 +52,9 @@
 namespace Dumpers::Entities
 {
 
+// Older games don't have this entity system
+#ifndef GAME_HLVR
+
 using namespace GameData;
 
 // An input or output as an FGD line and for schemas.json
@@ -1304,5 +1307,15 @@ bool Dump()
 	Globals::schemasJson["entities"] = GetEntitiesJson(entities);
 	return true;
 }
+
+#else
+
+bool Dump()
+{
+	spdlog::info("Entities are not supported in this game");
+	return true;
+}
+
+#endif
 
 } // namespace Dumpers::Entities

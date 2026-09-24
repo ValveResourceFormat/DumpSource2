@@ -24,6 +24,7 @@ endfunction()
 build_game(CS2 csgo CS2)
 build_game(DOTA dota DOTA)
 build_game(DEADLOCK citadel DEADLOCK)
+build_game(HLVR hlvr HLVR)
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Source Files" FILES ${SOURCES_LIST})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Header Files" FILES ${HEADERS_LIST})

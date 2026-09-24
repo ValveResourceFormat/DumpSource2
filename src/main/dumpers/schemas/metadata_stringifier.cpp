@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <map>
 #include <optional>
+#include <string_view>
 #include <unordered_set>
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
@@ -243,6 +244,46 @@ static std::string DescribeUnknownMetadata(const void* data)
 	return description;
 }
 
+#ifdef GAME_HLVR
+static bool IsNameSet(const char* name)
+{
+	return name != nullptr;
+}
+
+// Joins the names that are set
+static std::string JoinNames(const char* first, std::string_view separator, const char* second)
+{
+	if (IsNameSet(first) && IsNameSet(second))
+		return fmt::format("{}{}{}", first, separator, second);
+
+	if (IsNameSet(first))
+		return first;
+
+	return IsNameSet(second) ? second : "";
+}
+
+// The class that declares the field, the class itself or one of its bases
+static const char* FindFieldOwner(const SchemaClassInfoData_t* classInfo, const char* fieldName)
+{
+	if (!classInfo || !IsNameSet(fieldName))
+		return nullptr;
+
+	for (uint16_t i = 0; i < classInfo->m_nFieldCount; i++)
+	{
+		if (!strcmp(classInfo->m_pFields[i].m_pszName, fieldName))
+			return classInfo->m_pszName;
+	}
+
+	for (uint16_t i = 0; i < classInfo->m_nBaseClassCount; i++)
+	{
+		if (auto owner = FindFieldOwner(classInfo->m_pBaseClasses[i].m_pClass, fieldName))
+			return owner;
+	}
+
+	return nullptr;
+}
+#endif
+
 static bool HasMetadataValue(const SchemaMetadataEntryData_t& entry)
 {
 	if (!entry.m_pData)
@@ -300,6 +341,32 @@ static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData
 			}
 			return fmt::format("\"{}\"", std::string(result, 8));
 		}
+#ifdef GAME_HLVR
+		case MetadataValueType::FLOAT:
+			return std::to_string(*static_cast<float*>(entry.m_pData));
+		case MetadataValueType::USER_GROUP_SEND_PROXY_RECIPIENTS_FILTER:
+		{
+			// Points to the filter, which starts with the user group name
+			auto filter = *static_cast<const char* const* const*>(entry.m_pData);
+			if (!Modules::FindModuleContaining(filter) || !Modules::IsValidName(*filter))
+				return {};
+
+			return fmt::format("\"{}\"", *filter);
+		}
+		case MetadataValueType::VARNAME:
+		{
+			// Written as "type name"
+			auto value = static_cast<CSchemaVarName*>(entry.m_pData);
+			return fmt::format("\"{}\"", JoinNames(value->m_pszType, " ", value->m_pszName));
+		}
+		case MetadataValueType::NETWORK_OVERRIDE:
+		{
+			// Written as "Class::field". Without a class it's a field of the class or one of its bases.
+			auto value = static_cast<CSchemaNetworkOverride*>(entry.m_pData);
+			auto className = IsNameSet(value->m_pszClassName) ? value->m_pszClassName : FindFieldOwner(classInfo, value->m_pszFieldName);
+			return fmt::format("\"{}\"", JoinNames(className, "::", value->m_pszFieldName));
+		}
+#endif
 		case MetadataValueType::KV3DEFAULTS:
 			return GetKV3Defaults(entry, metadataTargetName, classInfo, jsonValue);
 	}

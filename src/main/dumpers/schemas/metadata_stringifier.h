@@ -25,6 +25,21 @@
 #include <schemasystem/schemasystem.h>
 #include "schemas.h"
 
+#ifdef GAME_HLVR
+// Values of network metadata, which older games keep in their schemas
+struct CSchemaVarName
+{
+	const char* m_pszName;
+	const char* m_pszType;
+};
+
+struct CSchemaNetworkOverride
+{
+	const char* m_pszClassName;
+	const char* m_pszFieldName;
+};
+#endif
+
 namespace Dumpers::Schemas
 {
 
