@@ -40,9 +40,14 @@ T* GetGlobalFromSignatureMatch(const void* match)
 
 // Game structs are read without knowing if their layout still matches, these check that pointers read from them
 // point into a loaded module (where names and registration objects are), so a changed layout fails instead of crashing.
+// On Linux CModule only covers the code segment, so this only checks for null there.
 inline bool IsInModule(const CModule& module, const void* pointer)
 {
+#ifdef _WIN32
 	return pointer >= module.m_base && pointer < (const uint8_t*)module.m_base + module.m_size;
+#else
+	return pointer != nullptr;
+#endif
 }
 
 inline const CModule* FindModuleContaining(const void* pointer)
@@ -69,9 +74,11 @@ inline bool IsValidName(const char* name, size_t maxLength = 256)
 	if (!module)
 		return false;
 
-	auto end = (const char*)module->m_base + module->m_size;
-	for (size_t i = 0; i < maxLength && name + i < end; i++)
+	for (size_t i = 0; i < maxLength; i++)
 	{
+		if (!IsInModule(*module, name + i))
+			return false;
+
 		if (name[i] == '\0')
 			return i > 0;
 

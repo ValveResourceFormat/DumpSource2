@@ -20,6 +20,7 @@
 #include "interfaces.h"
 #include "globalvariables.h"
 #include "modules.h"
+#include "gamedata.h"
 #include <interfaces/interfaces.h>
 #include <algorithm>
 #include <fstream>
@@ -34,7 +35,6 @@ namespace Dumpers::Interfaces
 // Returns false if a module exports CreateInterface but its interface list could not be found
 bool Dump()
 {
-#ifdef _WIN32
 	std::map<std::string, std::set<std::string>> interfaces;
 	std::string failed;
 
@@ -44,13 +44,12 @@ bool Dump()
 
 	for (auto module : modules)
 	{
-		auto createInterface = dlsym(module->m_hModule, "CreateInterface");
+		auto createInterface = (const uint8_t*)dlsym(module->m_hModule, "CreateInterface");
 		if (!createInterface)
 			continue;
 
-		// CreateInterface walks the InterfaceReg list, and its first instruction loads the list head.
 		// The head and registrations are static objects in the module, so anything else means the code changed.
-		auto head = Modules::GetGlobalFromSignatureMatch<InterfaceReg*>(createInterface);
+		auto head = Modules::GetGlobalFromSignatureMatch<InterfaceReg*>(createInterface + GameData::g_CreateInterfaceListOffset);
 		auto regs = Modules::IsInModule(*module, head) ? *head : nullptr;
 		bool valid = regs != nullptr;
 		std::set<std::string> names;
@@ -95,9 +94,6 @@ bool Dump()
 	}
 
 	spdlog::info("Wrote {} interfaces from {} modules to interfaces.txt", count, interfaces.size());
-#else
-	spdlog::info("Interfaces are not supported on this platform yet");
-#endif
 
 	return true;
 }

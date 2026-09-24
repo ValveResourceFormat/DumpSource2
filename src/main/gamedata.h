@@ -131,6 +131,18 @@ inline constexpr const char* g_SaveKV3TextToStringSymbol = "_Z20SaveKV3Text_ToSt
 #endif
 
 //-----------------------------------------------------------------------------
+// Interfaces
+//-----------------------------------------------------------------------------
+
+// CreateInterface walks the module's InterfaceReg list, this is the offset of the list head load from the export.
+// On Linux it comes after the function prologue.
+#ifdef _WIN32
+inline constexpr size_t g_CreateInterfaceListOffset = 0;
+#else
+inline constexpr size_t g_CreateInterfaceListOffset = 0x10;
+#endif
+
+//-----------------------------------------------------------------------------
 // Convars and commands
 //-----------------------------------------------------------------------------
 
