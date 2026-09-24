@@ -26,6 +26,7 @@
 
 #include "dumpers/concommands/concommands.h"
 #include "dumpers/entities/entities.h"
+#include "dumpers/interfaces/interfaces.h"
 #include "dumpers/schemas/schemas.h"
 #include "dumpers/module_metadata/module_metadata.h"
 
@@ -116,6 +117,9 @@ int main(int argc, char** argv)
 
 	// These read more game structs directly, so they run last to not lose the dumps above if they crash
 	if (!Dumpers::Entities::Dump())
+		exitCode = 1;
+
+	if (!Dumpers::Interfaces::Dump())
 		exitCode = 1;
 
 	WriteStringsIgnore();

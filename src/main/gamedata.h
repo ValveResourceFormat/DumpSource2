@@ -197,4 +197,14 @@ inline const byte g_EntityClassListSignature[] = "\x48\x8B\x1D\x2A\x2A\x2A\x2A\x
 // Modules that always link entities, not finding their list means the signature is outdated
 inline const std::unordered_set<std::string> g_RequiredEntityModules = { "client", "server" };
 
+//-----------------------------------------------------------------------------
+// Interfaces
+//-----------------------------------------------------------------------------
+
+// Signature of CreateInterface, which walks the module's InterfaceReg list, starting at the list head load.
+// It comes from the statically linked interfaces library, so it's the same in every module.
+#ifdef _WIN32
+inline const byte g_CreateInterfaceSignature[] = "\x4C\x8B\x0D\x2A\x2A\x2A\x2A\x4C\x8B\xD2\x4C\x8B\xD9\x4D\x85\xC9\x74\x2A\x49\x8B\x41\x08";
+#endif
+
 } // namespace GameData
