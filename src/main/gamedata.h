@@ -36,7 +36,23 @@ namespace GameData
 //-----------------------------------------------------------------------------
 
 // Modules that link tier1 contain this string, others can't have convars or schemas and are only loaded if they are app systems
+#ifdef GAME_HLVR
+inline constexpr const char* g_Tier1ModuleMarker = ") defined with infinite float";
+#else
 inline constexpr const char* g_Tier1ModuleMarker = "RegisterConVar: Unknown error";
+#endif
+
+#ifdef GAME_HLVR
+// Their static initializers write to .rdata, so they fail to load (error 1114). A copy with a writable .rdata is loaded instead.
+inline const std::unordered_set<std::string> g_ModulesWritingToRdata = { "tools/hammer", "tools/model_editor" };
+#endif
+
+// The module that exposes ICvar
+#ifdef GAME_HLVR
+inline constexpr const char* g_CvarModule = "vstdlib";
+#else
+inline constexpr const char* g_CvarModule = "tier0";
+#endif
 
 struct AppSystemInfo_t
 {
@@ -48,6 +64,10 @@ struct AppSystemInfo_t
 // App systems that get connected (but not initialized) to fill in module interface globals used by KV3 defaults.
 // Not listed: toolframework2 hangs when connecting, rendersystemempty/vulkan are alternatives to dx11.
 // This is also the module load order, which decides which convar declaration wins when declared by multiple modules.
+#ifdef GAME_HLVR
+// Half-Life: Alyx has no KV3 defaults, so nothing needs connecting
+inline const std::vector<AppSystemInfo_t> g_AppSystems{};
+#else
 inline const std::vector<AppSystemInfo_t> g_AppSystems{
 	{ false, "filesystem_stdio", FILESYSTEM_INTERFACE_VERSION },
 	{ false, "resourcesystem", RESOURCESYSTEM_INTERFACE_VERSION },
@@ -118,6 +138,7 @@ inline const std::vector<AppSystemInfo_t> g_AppSystems{
 	{ false, "subtools/soundviewer_subtool", "VConsole_SubTool_001_SoundViewerTool" },
 	{ false, "subtools/vprof_subtool", "VConsole_SubTool_001_ShowBudgetTool" },
 };
+#endif
 
 //-----------------------------------------------------------------------------
 // tier0 exports
@@ -205,7 +226,10 @@ inline constexpr size_t g_CreateInterfaceListOffset = 0x10;
 
 // Signatures of the list append code, starting at the list head load.
 // To update, find the list allocation (sizeof(ConVarRegList)) in tier0. The code is only linked into modules that declare any.
-#ifdef _WIN32
+#ifdef GAME_HLVR
+// Half-Life: Alyx has one ConCommandBase::s_pConCommandBases list for both, this is the insert in ConCommandBase's constructors
+inline const byte g_ConCommandBaseListSignature[] = "\x48\x8B\x05\x2A\x2A\x2A\x2A\x48\x89\x41\x08\x48\x89\x0D\x2A\x2A\x2A\x2A\xEB\x08\x48\xC7\x41\x08\x00\x00\x00\x00";
+#elif defined(_WIN32)
 inline const byte g_ConVarQueueSignature[] = "\x4C\x8B\x0D\x2A\x2A\x2A\x2A\x4D\x85\xC9\x74\x2A\x45\x8B\x01\x41\x83\xF8\x64";
 inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x0D\x2A\x2A\x2A\x2A\x48\x85\xC9\x74\x2A\x44\x8B\x01\x41\x83\xF8\x64";
 #else
@@ -214,7 +238,11 @@ inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\x
 #endif
 
 // Modules that always declare both, not finding their queues means the signatures are outdated
+#ifdef GAME_HLVR
+inline const std::unordered_set<std::string> g_RequiredQueueModules = { "vstdlib", "engine2", "client", "server" };
+#else
 inline const std::unordered_set<std::string> g_RequiredQueueModules = { "tier0", "engine2", "client", "server" };
+#endif
 
 // Convars with a random default value on each start
 inline const std::unordered_set<std::string> g_ConVarsWithRandomDefaults = { "cl_color" };

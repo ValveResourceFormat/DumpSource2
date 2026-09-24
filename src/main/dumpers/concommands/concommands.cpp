@@ -48,6 +48,44 @@ namespace Dumpers::ConCommands
 
 using namespace GameData;
 
+#ifdef GAME_HLVR
+static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
+	{ FCVAR_UNREGISTERED, "unregistered" },
+	{ FCVAR_DEVELOPMENTONLY, "developmentonly" },
+	{ FCVAR_GAMEDLL, "gamedll" },
+	{ FCVAR_CLIENTDLL, "clientdll" },
+	{ FCVAR_HIDDEN, "hidden" },
+	{ FCVAR_PROTECTED, "protected" },
+	{ FCVAR_SPONLY, "sponly" },
+	{ FCVAR_ARCHIVE, "archive" },
+	{ FCVAR_NOTIFY, "notify" },
+	{ FCVAR_USERINFO, "userinfo" },
+	{ FCVAR_PRINTABLEONLY, "printableonly" },
+	{ FCVAR_UNLOGGED, "unlogged" },
+	{ FCVAR_NEVER_AS_STRING, "never_as_string" },
+	{ FCVAR_REPLICATED, "replicated" },
+	{ FCVAR_CHEAT, "cheat" },
+	{ FCVAR_SS, "ss" },
+	{ FCVAR_DEMO, "demo" },
+	{ FCVAR_DONTRECORD, "dontrecord" },
+	{ FCVAR_SS_ADDED, "ss_added" },
+	{ FCVAR_RELEASE, "release" },
+	{ FCVAR_RELOAD_MATERIALS, "reload_materials" },
+	{ FCVAR_RELOAD_TEXTURES, "reload_textures" },
+	{ FCVAR_NOT_CONNECTED, "notconnected" },
+	{ FCVAR_MATERIAL_SYSTEM_THREAD, "material_system_thread" },
+	{ FCVAR_ARCHIVE_XBOX, "archive_xbox" },
+	{ FCVAR_ACCESSIBLE_FROM_THREADS, "accessible_from_threads" },
+	{ FCVAR_LINKED_CONCOMMAND, "linked_concommand" },
+	{ FCVAR_VCONSOLE_FUZZY_MATCHING, "vconsole_fuzzy_matching" },
+	{ FCVAR_SERVER_CAN_EXECUTE, "server_can_execute" },
+	{ FCVAR_SERVER_CANNOT_QUERY, "server_cannot_query" },
+	{ FCVAR_VCONSOLE_SET_FOCUS, "vconsole_set_focus" },
+	{ FCVAR_CLIENTCMD_CAN_EXECUTE, "clientcmd_can_execute" },
+	{ FCVAR_EXECUTE_PER_TICK, "execute_per_tick" },
+	{ FCVAR_SNAPSHOT_IGNORED, "snapshot_ignored" },
+};
+#else
 static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_LINKED_CONCOMMAND, "linked_concommand" },
 	{ FCVAR_DEVELOPMENTONLY, "developmentonly" },
@@ -85,6 +123,7 @@ static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ 1ull << 34, "gameinfo_cannot_override" }, // Not in every SDK yet
 	{ 1ull << 37, "enum_value" },               // Not in any SDK, name is ours. Value is a schema enum or enum flags, written as enumerator names
 };
+#endif
 
 static std::vector<std::string> GetFlagNames(uint64_t flags)
 {
@@ -176,8 +215,14 @@ static ConVarValue_t FormatValue(EConVarType type, const CVValue_t* value)
 			return { "float32", FormatNumber(value->m_fl32Value), true };
 		case EConVarType_Float64:
 			return { "float64", FormatNumber(value->m_fl64Value), true };
+#ifdef GAME_HLVR
+		// Every convar is a string there, which can have a min and max
+		case EConVarType_String:
+			return { "string", value->m_StringValue.m_pString ? value->m_StringValue.m_pString : "", true };
+#else
 		case EConVarType_String:
 			return { "string", value->m_StringValue.m_pString ? value->m_StringValue.m_pString : "", false };
+#endif
 		case EConVarType_Color:
 			return { "color", fmt::format("[{}, {}, {}, {}]", value->m_clrValue.r(), value->m_clrValue.g(), value->m_clrValue.b(), value->m_clrValue.a()), false };
 		case EConVarType_Vector2:
@@ -285,6 +330,80 @@ static Queue_t g_ConVarQueue{ "convar", "ConVarRegList", "convars.txt" };
 static Queue_t g_ConCommandQueue{ "concommand", "ConCommandRegList", "commands.txt" };
 static std::set<std::string> g_CollectedModules;
 
+#ifdef GAME_HLVR
+// A changed layout can still match the signature, so check what is read from the list before using it.
+// Returns what is invalid, or null.
+static const char* ValidateListed(const CModule& module, const ConCommandBase* base)
+{
+	// Some are allocated, like r_texture_object_pool_stats in rendersystemdx11
+	if (!Modules::IsInModule(module, *(void**)base))
+		return "vtable";
+	if (!Modules::IsValidName(base->m_pszName))
+		return "name";
+	if (base->m_pszHelpString && !Modules::FindModuleContaining(base->m_pszHelpString))
+		return "help string";
+
+	return nullptr;
+}
+
+static QueuedEntry_t CopyListed(const char* module, const ConCommandBase* base, bool isCommand)
+{
+	QueuedEntry_t entry{ module, base->m_pszName, base->m_pszHelpString ? base->m_pszHelpString : "", base->m_nFlags };
+	if (isCommand)
+		return entry;
+
+	// Values are strings that are also parsed as numbers, min and max are floats
+	auto convar = static_cast<const ConVar*>(base);
+	entry.m_eType = EConVarType_String;
+
+	if (Modules::FindModuleContaining(convar->m_pszDefaultValue))
+		entry.m_Default = convar->m_pszDefaultValue;
+	if (convar->m_bHasMin)
+		entry.m_Min = FormatFloat(convar->m_fMinVal);
+	if (convar->m_bHasMax)
+		entry.m_Max = FormatFloat(convar->m_fMaxVal);
+
+	return entry;
+}
+
+// Convars and commands are in the same list, which is read before ConVar_Register empties it
+void CollectQueues(CModule& module)
+{
+	g_CollectedModules.insert(module.m_pszModule);
+
+	int error;
+	auto match = module.FindSignature(g_ConCommandBaseListSignature, sizeof(g_ConCommandBaseListSignature) - 1, error);
+
+	// ConVar and ConCommand each inline the list insert, both matches load the same list
+	if (!match)
+	{
+		if (g_RequiredQueueModules.contains(module.m_pszModule))
+		{
+			spdlog::critical("Could not find the ConCommandBase list in {}, update the signature in gamedata.h", module.m_pszModule);
+			g_ConVarQueue.m_bFailed = g_ConCommandQueue.m_bFailed = true;
+		}
+
+		return;
+	}
+
+	int cvars = 0, cmds = 0;
+	for (auto base = *Modules::GetGlobalFromSignatureMatch<ConCommandBase*>(match); base; base = base->m_pNext)
+	{
+		if (auto invalid = ValidateListed(module, base))
+		{
+			spdlog::critical("ConCommandBase list entry {} in {} has an invalid {}, ConCommandBase in the SDK needs updating", cvars + cmds, module.m_pszModule, invalid);
+			g_ConVarQueue.m_bFailed = g_ConCommandQueue.m_bFailed = true;
+			return;
+		}
+
+		const bool isCommand = base->IsCommand();
+		(isCommand ? cmds : cvars)++;
+		(isCommand ? g_ConCommandQueue : g_ConVarQueue).m_Entries.push_back(CopyListed(module.m_pszModule, base, isCommand));
+	}
+
+	spdlog::debug("Listed in {}: {} convars, {} commands", module.m_pszModule, cvars, cmds);
+}
+#else
 static QueuedEntry_t CopyQueued(const char* module, const ConVarRegList::Entry_t& queued)
 {
 	const auto& creation = queued.m_Info;
@@ -402,6 +521,7 @@ void CollectQueues(CModule& module)
 
 	spdlog::debug("Queued in {}: {} convars, {} commands", module.m_pszModule, cvars, cmds);
 }
+#endif
 
 static void WriteHelp(const char* name, const char* help, std::ofstream& output)
 {
@@ -435,8 +555,13 @@ static uint64 GetModuleRegisterFlags(const char* module)
 // modules gets the modules that declare it
 static QueuedEntry_t MergeQueued(const std::vector<QueuedEntry_t*>& entries, std::set<std::string>& modules)
 {
+#ifdef GAME_HLVR
+	constexpr uint64 laterWins = 0;
+	constexpr uint64 stripped = 0;
+#else
 	constexpr uint64 laterWins = FCVAR_CHEAT | FCVAR_REPLICATED | FCVAR_DONTRECORD | FCVAR_ARCHIVE | FCVAR_PER_USER;
 	constexpr uint64 stripped = FCVAR_INITIAL_SETVALUE | FCVAR_PERFORMING_CALLBACKS;
+#endif
 
 	std::optional<QueuedEntry_t> merged;
 

@@ -123,6 +123,17 @@ static bool DumpClasses(const std::vector<IntermediateSchemaClass>& classes, con
 			Globals::stringsIgnoreStream << field.name << "\n";
 		}
 
+		for (const auto& field : intermediateClass.staticFields)
+		{
+			for (const auto& metadata : field.metadata)
+			{
+				OutputMetadataEntry(metadata, output, true);
+			}
+
+			output << "\tstatic " << field.type->m_sTypeName.String() << " " << field.name << ";\n";
+			Globals::stringsIgnoreStream << field.name << "\n";
+		}
+
 		output << "};\n";
 
 		if (!CloseOutput(output, path))

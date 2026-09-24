@@ -135,8 +135,10 @@ static int Run(int argc, char** argv)
 			exitCode = 1;
 		}
 
+#ifndef GAME_HLVR // Half-Life: Alyx modules have no metadata
 		if (!Dumpers::ModuleMetadata::Dump())
 			exitCode = 1;
+#endif
 	}
 	else
 	{

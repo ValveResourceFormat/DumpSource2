@@ -53,7 +53,16 @@ static json SerializeType(CSchemaType* type)
 
 	json j;
 
-	switch (type->m_eTypeCategory)
+#ifdef GAME_HLVR
+	// Half-Life: Alyx's types return their categories from virtuals
+	const auto typeCategory = type->GetTypeCategory();
+	const auto atomicCategory = type->GetAtomicCategory();
+#else
+	const auto typeCategory = type->m_eTypeCategory;
+	const auto atomicCategory = type->m_eAtomicCategory;
+#endif
+
+	switch (typeCategory)
 	{
 		case SCHEMA_TYPE_BUILTIN:
 			j["category"] = "builtin";
@@ -91,29 +100,31 @@ static json SerializeType(CSchemaType* type)
 				j["name"] = typeName;
 			}
 
-			if (type->m_eAtomicCategory == SCHEMA_ATOMIC_T ||
-				type->m_eAtomicCategory == SCHEMA_ATOMIC_COLLECTION_OF_T)
+			if (atomicCategory == SCHEMA_ATOMIC_T ||
+				atomicCategory == SCHEMA_ATOMIC_COLLECTION_OF_T)
 			{
 				j["inner"] = SerializeType(static_cast<CSchemaType_Atomic_T*>(type)->m_pTemplateType);
 			}
-			else if (type->m_eAtomicCategory == SCHEMA_ATOMIC_TT)
+			else if (atomicCategory == SCHEMA_ATOMIC_TT)
 			{
 				auto* tt = static_cast<CSchemaType_Atomic_TT*>(type);
 				j["inner"] = SerializeType(tt->m_pTemplateType);
 				j["inner2"] = SerializeType(tt->m_pTemplateType2);
 			}
-			else if (type->m_eAtomicCategory == SCHEMA_ATOMIC_I)
+			else if (atomicCategory == SCHEMA_ATOMIC_I)
 			{
 				// Like the size of CBitVec<N>
 				j["count"] = static_cast<CSchemaType_Atomic_I*>(type)->m_nInteger;
 			}
 
+#ifndef GAME_HLVR
 			// Like the inline element count of CUtlVectorFixedGrowable<T, N>
-			if (type->m_eAtomicCategory == SCHEMA_ATOMIC_COLLECTION_OF_T)
+			if (atomicCategory == SCHEMA_ATOMIC_COLLECTION_OF_T)
 			{
 				if (auto count = static_cast<CSchemaType_Atomic_CollectionOfT*>(type)->m_nFixedBufferCount)
 					j["count"] = count;
 			}
+#endif
 			break;
 		}
 		case SCHEMA_TYPE_DECLARED_CLASS:
@@ -147,7 +158,7 @@ static json SerializeType(CSchemaType* type)
 			j["count"] = static_cast<CSchemaType_Bitfield*>(type)->m_nBitfieldCount;
 			break;
 		default:
-			spdlog::warn("Type '{}' has unknown category {}, written as builtin", type->m_sTypeName.String(), (int)type->m_eTypeCategory);
+			spdlog::warn("Type '{}' has unknown category {}, written as builtin", type->m_sTypeName.String(), (int)typeCategory);
 			j["category"] = "builtin";
 			j["name"] = type->m_sTypeName.String();
 			break;
@@ -163,10 +174,12 @@ static void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, jso
 		json classObj;
 		classObj["name"] = intermediateClass.name;
 		classObj["module"] = intermediateClass.module;
+#ifndef GAME_HLVR // Half-Life: Alyx is dumped once, the layout would go out of date when the game updates
 		classObj["size"] = intermediateClass.size;
 
 		if (intermediateClass.alignment != 255)
 			classObj["alignment"] = intermediateClass.alignment;
+#endif
 
 		if (!intermediateClass.flags.empty())
 			classObj["flags"] = intermediateClass.flags;
@@ -182,8 +195,10 @@ static void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, jso
 			parentObj["name"] = parent.name;
 			parentObj["module"] = parent.module;
 
+#ifndef GAME_HLVR
 			if (parent.offset)
 				parentObj["offset"] = parent.offset;
+#endif
 			parents.push_back(std::move(parentObj));
 		}
 
@@ -195,12 +210,28 @@ static void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, jso
 		{
 			json fieldObj;
 			fieldObj["name"] = field.name;
+#ifndef GAME_HLVR
 			fieldObj["offset"] = field.offset;
+#endif
 			fieldObj["type"] = SerializeType(field.type);
 
 			auto fieldMetadataArr = SerializeMetadataArray(field.metadata);
 			if (fieldMetadataArr.size())
 				fieldObj["metadata"] = std::move(fieldMetadataArr);
+
+			fields.push_back(std::move(fieldObj));
+		}
+
+		// Static fields are listed after the fields, tagged with a metadata entry that is ours. They have no offset.
+		for (const auto& field : intermediateClass.staticFields)
+		{
+			json fieldObj;
+			fieldObj["name"] = field.name;
+			fieldObj["type"] = SerializeType(field.type);
+
+			auto fieldMetadataArr = SerializeMetadataArray(field.metadata);
+			fieldMetadataArr.push_back({ { "name", "static" } });
+			fieldObj["metadata"] = std::move(fieldMetadataArr);
 
 			fields.push_back(std::move(fieldObj));
 		}

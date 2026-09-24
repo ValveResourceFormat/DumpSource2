@@ -335,6 +335,15 @@ static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData
 			auto& value = *static_cast<CSchemaSendProxyRecipientsFilter*>(entry.m_pData);
 			return fmt::format("\"{}\"", value.m_pszName ? value.m_pszName : "(NULL)");
 		}
+		case MetadataValueType::USER_GROUP_SEND_PROXY_RECIPIENTS_FILTER:
+		{
+			// Points to the filter, which starts with the user group name
+			auto filter = *static_cast<const char* const* const*>(entry.m_pData);
+			if (!Modules::FindModuleContaining(filter) || !Modules::IsValidName(*filter))
+				return {};
+
+			return fmt::format("\"{}\"", *filter);
+		}
 		case MetadataValueType::VARNAME:
 		{
 			// Written as "type name"

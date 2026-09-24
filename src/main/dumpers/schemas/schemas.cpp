@@ -83,6 +83,21 @@ static const char* ValidateClass(const SchemaClassInfoData_t* classInfo)
 			return invalid;
 	}
 
+#ifdef GAME_HLVR
+	if (classInfo->m_nStaticFieldCount > 0 && !Modules::FindModuleContaining(classInfo->m_pStaticFields))
+		return "static fields pointer";
+
+	for (uint16_t i = 0; i < classInfo->m_nStaticFieldCount; i++)
+	{
+		const auto& field = classInfo->m_pStaticFields[i];
+
+		if (!Modules::IsValidName(field.m_pszName))
+			return "static field name";
+		if (auto invalid = ValidateMetadata(field.m_pStaticMetadata, field.m_nStaticMetadataCount))
+			return invalid;
+	}
+#endif
+
 	return nullptr;
 }
 
@@ -110,6 +125,14 @@ const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
 	return nullptr;
 }
 
+#ifdef GAME_HLVR
+// Half-Life: Alyx has no info tag flags, it keeps them in the metadata
+static constexpr std::pair<uint32, const char*> g_ClassFlags[] = {
+	{ SCHEMA_CF1_IS_ABSTRACT, "abstract" },
+	{ SCHEMA_CF1_HAS_TRIVIAL_CONSTRUCTOR, "trivial_constructor" },
+	{ SCHEMA_CF1_HAS_TRIVIAL_DESTRUCTOR, "trivial_destructor" },
+};
+#else
 // Metadata that schemasystem stores as class flags instead of in the class metadata.
 // Bits 16 and 17 are also used, but schemasystem has no names for them, the SDK's MConstructibleClassBase is a guess.
 static constexpr std::pair<uint32, const char*> g_ClassInfoTagFlags[] = {
@@ -130,6 +153,7 @@ static constexpr std::pair<uint32, const char*> g_ClassFlags[] = {
 	{ SCHEMA_CF1_HAS_TRIVIAL_DESTRUCTOR, "trivial_destructor" },
 	{ SCHEMA_CF1_CONSTRUCT_DISALLOWED, "construct_disallowed" },
 };
+#endif
 
 static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchemaClass>& classes)
 {
@@ -174,11 +198,13 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 			schemaClass.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName, classInfo));
 		}
 
+#ifndef GAME_HLVR
 		for (const auto& [flag, name] : g_ClassInfoTagFlags)
 		{
 			if (classInfo->m_nFlags1 & flag)
 				schemaClass.metadata.push_back({ .name = name, .hasValue = false });
 		}
+#endif
 
 		for (uint16_t baseIndex = 0; baseIndex < classInfo->m_nBaseClassCount; ++baseIndex)
 		{
@@ -208,6 +234,23 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 
 			schemaClass.fields.push_back(std::move(intermediateField));
 		}
+
+#ifdef GAME_HLVR
+		for (uint16_t k = 0; k < classInfo->m_nStaticFieldCount; k++)
+		{
+			const auto& field = classInfo->m_pStaticFields[k];
+			IntermediateSchemaClassField intermediateField{
+				.name = std::string(field.m_pszName),
+				.offset = 0,
+				.type = field.m_pType,
+			};
+
+			for (uint16_t l = 0; l < field.m_nStaticMetadataCount; l++)
+				intermediateField.metadata.push_back(GetMetadata(field.m_pStaticMetadata[l], classInfo->m_pszName, classInfo));
+
+			schemaClass.staticFields.push_back(std::move(intermediateField));
+		}
+#endif
 
 		classes.push_back(std::move(schemaClass));
 	}

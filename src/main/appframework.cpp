@@ -85,6 +85,41 @@ static void* TryFindInterface(const CModule& module, const char* name)
 	return factory ? factory(name, nullptr) : nullptr;
 }
 
+struct ModuleFile
+{
+	std::string path;
+	std::string name;
+	std::string file;
+};
+
+#ifdef GAME_HLVR
+// Copies the module into a temporary folder with its .rdata section made writable, and points module at the copy
+static bool UseCopyWithWritableRdata(ModuleFile& module)
+{
+	std::string contents(std::filesystem::file_size(module.file), '\0');
+	std::ifstream(module.file, std::ios::binary).read(contents.data(), contents.size());
+
+	const auto pe = *(const uint32_t*)&contents[0x3C];
+	const auto sectionCount = *(const uint16_t*)&contents[pe + 6];
+	const auto sections = (IMAGE_SECTION_HEADER*)&contents[pe + 24 + *(const uint16_t*)&contents[pe + 20]];
+
+	auto rdata = std::find_if(sections, sections + sectionCount, [](const IMAGE_SECTION_HEADER& section) { return !strncmp((const char*)section.Name, ".rdata", sizeof(section.Name)); });
+	if (rdata == sections + sectionCount)
+		return false;
+
+	rdata->Characteristics |= IMAGE_SCN_MEM_WRITE;
+
+	const auto root = std::filesystem::temp_directory_path() / "DumpSource2-HLVR";
+	const auto file = root / (MODULE_PREFIX + module.name + MODULE_EXT);
+	std::filesystem::create_directories(file.parent_path());
+	std::ofstream(file, std::ios::binary).write(contents.data(), contents.size());
+
+	module.path = root.generic_string();
+	module.file = file.generic_string();
+	return true;
+}
+#endif
+
 // Loads every module that links tier1 and reads its convar queues, without touching schemasystem or app systems
 void InitializeModules()
 {
@@ -93,13 +128,6 @@ void InitializeModules()
 
 	Dumpers::ConCommands::CollectQueues(*Modules::tier0);
 	Dumpers::ConCommands::CollectQueues(*Modules::schemaSystem);
-
-	struct ModuleFile
-	{
-		std::string path;
-		std::string name;
-		std::string file;
-	};
 
 	// CModule keeps pointers to the path and name
 	static std::vector<ModuleFile> modules;
@@ -140,8 +168,13 @@ void InitializeModules()
 
 	// Some modules import dlls that the game does not ship (e.g. vfx_dx11 needs slang)
 	std::string failed;
-	for (const auto& module : modules)
+	for (auto& module : modules)
 	{
+#ifdef GAME_HLVR
+		if (g_ModulesWritingToRdata.contains(module.name) && !UseCopyWithWritableRdata(module))
+			spdlog::warn("{} has no .rdata section, loading it as is", module.name);
+#endif
+
 		if (!dlmount(module.file.c_str()))
 		{
 #ifdef _WIN32
@@ -163,16 +196,18 @@ void InitializeModules()
 // Installs schema bindings and connects app systems. Connecting frees the convar queues, so they must be read before this.
 bool InitializeSchemas()
 {
-	Interfaces::cvar = (ICvar*)TryFindInterface(*Modules::tier0, CVAR_INTERFACE_VERSION);
+	auto loaded = std::find_if(Modules::allModules.begin(), Modules::allModules.end(), [](const CModule& m) { return !strcmp(m.m_pszModule, g_CvarModule); });
+	auto& cvarModule = loaded != Modules::allModules.end() ? *loaded : *Modules::tier0;
+	Interfaces::cvar = (ICvar*)TryFindInterface(cvarModule, CVAR_INTERFACE_VERSION);
 	if (!Interfaces::cvar)
 	{
-		spdlog::critical("Could not find {} in tier0, the interface version in the SDK needs updating", CVAR_INTERFACE_VERSION);
+		spdlog::critical("Could not find {} in {}, the interface version in the SDK needs updating", CVAR_INTERFACE_VERSION, g_CvarModule);
 		return false;
 	}
 
 	// schemasystem needs ICvar when connecting
 	g_pCVar = Interfaces::cvar;
-	if (!Interfaces::cvar->Connect(Modules::tier0->GetFactory()))
+	if (!Interfaces::cvar->Connect(cvarModule.GetFactory()))
 	{
 		spdlog::critical("Failed to connect {}", CVAR_INTERFACE_VERSION);
 		return false;
