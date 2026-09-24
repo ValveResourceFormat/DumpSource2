@@ -53,15 +53,26 @@ namespace Dumpers::Entities
 
 using namespace GameData;
 
+// An input or output as an FGD line and for schemas.json
+struct EntityIO_t
+{
+	std::string m_Name;
+	std::string m_Line;
+	nlohmann::json m_Json;
+};
+
 struct EntityClass_t
 {
-	const CEntityClassInfo* m_pClassInfo;
+	const CEntityClass* m_pClass;
 	std::string m_BaseName;
-	std::string m_Details;
 	std::vector<std::string> m_Lines;
-	std::vector<std::string> m_Inputs;
-	std::vector<std::string> m_Outputs;
+	std::vector<EntityIO_t> m_Inputs;
+	std::vector<EntityIO_t> m_Outputs;
 	std::vector<std::string> m_Strings;
+
+	// The same keys and components for schemas.json
+	nlohmann::json m_Keys = nlohmann::json::array();
+	nlohmann::json m_Components = nlohmann::json::array();
 };
 
 static const std::pair<int, const char*> g_ClassFlagNames[] = {
@@ -81,28 +92,39 @@ static const std::pair<int, const char*> g_ClassFlagNames[] = {
 // Classes override a few components at most, more means the array is not what it's expected to be
 static constexpr int g_MaxComponentOverrides = 64;
 
-// Flags and spawn order, which only a few classes set
-static std::string GetClassDetails(const CEntityClass* entityClass)
+// Flags which only a few classes set
+static std::vector<std::string> GetClassFlags(const CEntityClass* entityClass)
 {
-	std::string details;
+	std::vector<std::string> names;
 	auto flags = entityClass->m_flags;
 
 	for (const auto& [flag, name] : g_ClassFlagNames)
 	{
 		if (flags & flag)
 		{
-			details += fmt::format(", {}", name);
+			names.push_back(name);
 			flags &= ~flag;
 		}
 	}
 
 	if (flags)
-		details += fmt::format(", ECF_UNKNOWN_{:X}", flags);
+		names.push_back(fmt::format("ECF_UNKNOWN_{:X}", flags));
+
+	return names;
+}
+
+// C++ class, flags and spawn order, for the comment above FGD classes
+static std::string GetClassComment(const CEntityClass* entityClass)
+{
+	auto comment = std::string(entityClass->m_pClassInfo->m_pszCPPClassname);
+
+	for (const auto& flag : GetClassFlags(entityClass))
+		comment += ", " + flag;
 
 	if (entityClass->m_SpawnOrder)
-		details += fmt::format(", spawn order {}", entityClass->m_SpawnOrder);
+		comment += fmt::format(", spawn order {}", entityClass->m_SpawnOrder);
 
-	return details;
+	return comment;
 }
 
 // Datadesc field types, and the FGD key type Hammer knows for them
@@ -261,8 +283,10 @@ static bool GetArrayKeyNames(const typedescription_t& field, const char* key, st
 
 // Keys that can be set on the entity as FGD keys, with the datadesc type and C++ field in a comment.
 // Enum keys list their values as choices. Keys from embedded datamaps (like CCollisionProperty) are indented under a comment with their field.
+// The same keys go into keysJson, with the path of the embedded datamap fields they are under.
 // Returns false if the datamap is not what it's expected to be.
-static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::string& indent, std::vector<std::string>& lines, std::vector<std::string>& strings)
+static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::string& indent, const std::string& path, std::vector<std::string>& lines, nlohmann::json& keysJson,
+	std::vector<std::string>& strings)
 {
 	for (int i = 0; i < map->dataNumFields; i++)
 	{
@@ -276,7 +300,7 @@ static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::
 				continue;
 
 			std::vector<std::string> embedded;
-			if (!AddKeyFields(field.td, enums, indent + "\t", embedded, strings))
+			if (!AddKeyFields(field.td, enums, indent + "\t", path.empty() ? field.fieldName : path + "." + field.fieldName, embedded, keysJson, strings))
 				return false;
 
 			if (!embedded.empty())
@@ -305,6 +329,7 @@ static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::
 		// The union holds an enum name for enum fields
 		const SchemaEnumInfoData_t* enumInfo = nullptr;
 		std::string enumComment;
+		nlohmann::json keyJson;
 		if (Modules::IsValidName(field.enumName))
 		{
 			if (auto it = enums.find(field.enumName); it != enums.end())
@@ -313,6 +338,10 @@ static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::
 				spdlog::warn("Enum {} of key {} in {} is not in the schema system", field.enumName, key, map->dataClassName);
 
 			enumComment = fmt::format(" ({})", field.enumName);
+			keyJson["enum"] = field.enumName;
+
+			if (enumInfo)
+				keyJson["enumModule"] = enumInfo->m_pszProjectName;
 		}
 
 		strings.push_back(key);
@@ -323,6 +352,28 @@ static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::
 			spdlog::critical("Key {} of {} has array flags {:X} without a key name pattern, the FTYPEDESC flags in the SDK need updating", key, map->dataClassName, field.flags);
 			return false;
 		}
+
+		keyJson["name"] = key;
+		keyJson["type"] = typeName;
+		keyJson["declaredIn"] = map->dataClassName;
+
+		if (!isProcedural)
+			keyJson["field"] = field.fieldName;
+		if (!path.empty())
+			keyJson["path"] = path;
+		if (isProcedural)
+			keyJson["procedural"] = true;
+		if (field.flags & FTYPEDESC_REMOVED_KEYFIELD)
+			keyJson["removed"] = true;
+
+		// Array keys are one key with the name pattern
+		if (!arrayKeyNames.empty())
+		{
+			keyJson["arrayStart"] = (field.flags & FTYPEDESC_GEN_ARRAY_KEYNAMES_1) ? 1 : 0;
+			keyJson["arrayCount"] = arrayKeyNames.size();
+		}
+
+		keysJson.push_back(std::move(keyJson));
 
 		// Procedural keys like weapon%d are named in code and have no array size
 		if (arrayKeyNames.empty() && strchr(key, '%'))
@@ -386,21 +437,31 @@ static const char* GetPulseFGDType(const std::string& type)
 	return "string";
 }
 
-// Pulse parameters as "type name" for comments, without the target parameter
-static std::vector<std::string> GetPulseParams(const nlohmann::ordered_json& meta, const char* paramsKey, const std::string& targetArg)
+// Pulse parameters without the target parameter, as [{ name, type }] like in schemas.json
+static nlohmann::json GetPulseParams(const nlohmann::ordered_json& meta, const char* paramsKey, const std::string& targetArg)
 {
-	std::vector<std::string> params;
+	auto params = nlohmann::json::array();
 
 	if (auto it = meta.find(paramsKey); it != meta.end() && it->is_object())
 	{
 		for (const auto& [name, param] : it->items())
 		{
 			if (name != targetArg)
-				params.push_back(fmt::format("{} {}", param.value("type", std::string()), name));
+				params.push_back({ { "name", name }, { "type", param.value("type", std::string()) } });
 		}
 	}
 
 	return params;
+}
+
+// Parameters as "type name, type name" for FGD comments
+static std::string FormatPulseParams(const nlohmann::json& params)
+{
+	std::string text;
+	for (const auto& param : params)
+		text += fmt::format("{}{} {}", text.empty() ? "" : ", ", param["type"].get<std::string>(), param["name"].get<std::string>());
+
+	return text;
 }
 
 // Entity inputs and outputs are Pulse bindings in the module metadata, on the API class of the entity (like CBaseTrigger_API).
@@ -465,26 +526,40 @@ static bool AddInputsAndOutputs(const CModule& module, const std::string& rootNa
 		// Inputs with several parameters can only be called from Pulse
 		const bool isApi = params.size() > 1;
 		const char* fgdType = params.empty() ? "void" : isApi ? "api"
-		                                                      : GetPulseFGDType(params[0].substr(0, params[0].find(' ')));
+		                                                      : GetPulseFGDType(params[0]["type"].get<std::string>());
 		auto line = fmt::format("\t{} {}({})", isInput ? "input" : "output", name, fgdType);
 
-		auto comments = params;
+		nlohmann::json json;
+		json["name"] = name;
+		json["params"] = params;
+
+		std::vector<std::string> comments;
+		if (!params.empty())
+			comments.push_back(FormatPulseParams(params));
 
 		// Some inputs are Pulse functions that return values
 		if (isInput)
 		{
-			if (auto returned = GetPulseParams(meta, "pulse_outparams", targetArg); !returned.empty())
-				comments.push_back(fmt::format("returns {}", fmt::join(returned, ", ")));
+			auto returned = GetPulseParams(meta, "pulse_outparams", targetArg);
+			if (!returned.empty())
+				comments.push_back("returns " + FormatPulseParams(returned));
 
 			// Most inputs are hidden in the Pulse editor, the rest are also Pulse nodes
-			if (!meta.value("hidden_in_tool", false))
+			const bool isPulseNode = !meta.value("hidden_in_tool", false);
+			if (isPulseNode)
 				comments.push_back("Pulse node");
+
+			json["returns"] = std::move(returned);
+			json["pulseNode"] = isPulseNode;
 		}
 
 		auto comment = fmt::format("{}", fmt::join(comments, ", "));
 
-		// FGD strings are one line without quotes, and api inputs and outputs can't have a description
 		auto description = binding.value("m_Description", std::string());
+		if (!description.empty())
+			json["description"] = description;
+
+		// FGD strings are one line without quotes, and api inputs and outputs can't have a description
 		std::replace(description.begin(), description.end(), '"', '\'');
 		std::replace(description.begin(), description.end(), '\n', ' ');
 		if (!description.empty())
@@ -498,7 +573,7 @@ static bool AddInputsAndOutputs(const CModule& module, const std::string& rootNa
 		if (!comment.empty())
 			line += " // " + comment;
 
-		(isInput ? entity->second.m_Inputs : entity->second.m_Outputs).push_back(std::move(line));
+		(isInput ? entity->second.m_Inputs : entity->second.m_Outputs).push_back({ name, std::move(line), std::move(json) });
 		entity->second.m_Strings.push_back(name);
 		(isInput ? inputs : outputs)++;
 	}
@@ -539,6 +614,10 @@ static const char* ValidateEntityClass(const CModule& module, const CEntityClass
 			return "base class info";
 	}
 
+	// The schema class, which can be in another module like CEntityInstance in entity2
+	if (auto binding = classInfo->m_pSchemaBinding; binding && (!Modules::FindModuleContaining(binding) || !Modules::IsValidName(binding->m_pszProjectName)))
+		return "schema binding";
+
 	// A static array that ends with an empty entry
 	if (auto overrides = entityClass->m_pComponentOverrides)
 	{
@@ -559,6 +638,11 @@ static const char* ValidateEntityClass(const CModule& module, const CEntityClass
 static bool HasDesignName(const CEntityClassInfo* classInfo)
 {
 	return classInfo->m_pszClassname && classInfo->m_pszClassname[0];
+}
+
+static bool IsSpawnable(const CEntityClassInfo* classInfo)
+{
+	return HasDesignName(classInfo) && !(classInfo->m_nFlags & ECIF_NOT_SPAWNABLE);
 }
 
 // FGD class name, the C++ class name for classes without a design name
@@ -592,11 +676,62 @@ static bool AddClassKeyFields(const CEntityClassInfo* classInfo, const CEntityCl
 		if (strcmp(classInfo->m_pszCPPClassname, map->dataClassName))
 			entity.m_Lines.push_back(fmt::format("\t// {}", map->dataClassName));
 
-		if (!AddKeyFields(map, enums, "\t", entity.m_Lines, entity.m_Strings))
+		if (!AddKeyFields(map, enums, "\t", "", entity.m_Lines, entity.m_Keys, entity.m_Strings))
 			return false;
 	}
 
 	return true;
+}
+
+// Entities for schemas.json, keyed by their C++ class which is also their schema class
+static nlohmann::json GetIOJson(std::vector<EntityIO_t>& list)
+{
+	auto array = nlohmann::json::array();
+	for (auto& io : list)
+		array.push_back(std::move(io.m_Json));
+
+	return array;
+}
+
+// Entities for schemas.json, keyed by their C++ class which is also their schema class. Moves the JSON out of the classes.
+static nlohmann::json GetEntitiesJson(std::map<std::string, std::map<std::string, EntityClass_t>>& entities)
+{
+	auto array = nlohmann::json::array();
+
+	for (auto& [module, classes] : entities)
+	{
+		for (auto& [name, entity] : classes)
+		{
+			auto classInfo = entity.m_pClass->m_pClassInfo;
+
+			nlohmann::json json;
+			json["class"] = classInfo->m_pszCPPClassname;
+			json["module"] = module;
+			json["classModule"] = classInfo->m_pSchemaBinding ? classInfo->m_pSchemaBinding->m_pszProjectName : module;
+			json["spawnable"] = IsSpawnable(classInfo);
+
+			if (HasDesignName(classInfo))
+				json["designName"] = classInfo->m_pszClassname;
+			if (!entity.m_BaseName.empty())
+				json["baseClass"] = classes.at(entity.m_BaseName).m_pClass->m_pClassInfo->m_pszCPPClassname;
+			if (auto flags = GetClassFlags(entity.m_pClass); !flags.empty())
+				json["flags"] = std::move(flags);
+			if (entity.m_pClass->m_SpawnOrder)
+				json["spawnOrder"] = entity.m_pClass->m_SpawnOrder;
+			if (!entity.m_Components.empty())
+				json["components"] = std::move(entity.m_Components);
+			if (!entity.m_Keys.empty())
+				json["keys"] = std::move(entity.m_Keys);
+			if (!entity.m_Inputs.empty())
+				json["inputs"] = GetIOJson(entity.m_Inputs);
+			if (!entity.m_Outputs.empty())
+				json["outputs"] = GetIOJson(entity.m_Outputs);
+
+			array.push_back(std::move(json));
+		}
+	}
+
+	return array;
 }
 
 // Returns false if the entity class list could not be found or read in a module that has one
@@ -643,16 +778,16 @@ bool Dump()
 			}
 
 			EntityClass_t entity;
-			entity.m_pClassInfo = entityClass->m_pClassInfo;
-			entity.m_Details = GetClassDetails(entityClass);
+			entity.m_pClass = entityClass;
 
 			for (auto overrides = entityClass->m_pComponentOverrides; overrides && overrides->pszBaseComponent; overrides++)
 			{
 				entity.m_Lines.push_back(fmt::format("\t// component {}: {}", overrides->pszBaseComponent, overrides->pszOverrideComponent));
+				entity.m_Components.push_back({ { "base", overrides->pszBaseComponent }, { "override", overrides->pszOverrideComponent } });
 				entity.m_Strings.push_back(overrides->pszOverrideComponent);
 			}
 
-			classes[GetFGDName(entity.m_pClassInfo)] = std::move(entity);
+			classes[GetFGDName(entityClass->m_pClassInfo)] = std::move(entity);
 		}
 
 		// Some modules, like engine2, link the entity system without any entity classes
@@ -674,7 +809,7 @@ bool Dump()
 		std::string rootName;
 		for (auto& [name, entity] : classes)
 		{
-			auto base = entity.m_pClassInfo->m_pBaseClassInfo;
+			auto base = entity.m_pClass->m_pClassInfo->m_pBaseClassInfo;
 			while (base && !classes.contains(GetFGDName(base)))
 				base = base->m_pBaseClassInfo;
 
@@ -683,7 +818,7 @@ bool Dump()
 			else
 				rootName = name;
 
-			if (!AddClassKeyFields(entity.m_pClassInfo, base, enums, entity))
+			if (!AddClassKeyFields(entity.m_pClass->m_pClassInfo, base, enums, entity))
 			{
 				failed = true;
 				break;
@@ -692,6 +827,14 @@ bool Dump()
 
 		if (!failed && !AddInputsAndOutputs(module, rootName, classes))
 			failed = true;
+
+		// By name, the rest of the line only orders inputs with the same name
+		auto byName = [](const EntityIO_t& a, const EntityIO_t& b) { return std::tie(a.m_Name, a.m_Line) < std::tie(b.m_Name, b.m_Line); };
+		for (auto& [name, entity] : classes)
+		{
+			std::sort(entity.m_Inputs.begin(), entity.m_Inputs.end(), byName);
+			std::sort(entity.m_Outputs.begin(), entity.m_Outputs.end(), byName);
+		}
 	}
 
 	if (failed)
@@ -732,22 +875,22 @@ bool Dump()
 			if (!entityClass.m_BaseName.empty())
 				writeClass(entityClass.m_BaseName);
 
-			auto classInfo = entityClass.m_pClassInfo;
-			output << "// " << classInfo->m_pszCPPClassname << entityClass.m_Details << "\n";
-			output << (HasDesignName(classInfo) && !(classInfo->m_nFlags & ECIF_NOT_SPAWNABLE) ? "@PointClass" : "@BaseClass");
+			auto classInfo = entityClass.m_pClass->m_pClassInfo;
+			output << "// " << GetClassComment(entityClass.m_pClass) << "\n";
+			output << (IsSpawnable(classInfo) ? "@PointClass" : "@BaseClass");
 
 			if (!entityClass.m_BaseName.empty())
 				output << " base(" << entityClass.m_BaseName << ")";
 
 			output << " = " << designName << "\n[\n";
 
-			std::sort(entityClass.m_Inputs.begin(), entityClass.m_Inputs.end());
-			std::sort(entityClass.m_Outputs.begin(), entityClass.m_Outputs.end());
+			for (const auto& line : entityClass.m_Lines)
+				output << line << "\n";
 
-			for (const auto* lines : { &entityClass.m_Lines, &entityClass.m_Inputs, &entityClass.m_Outputs })
+			for (const auto* list : { &entityClass.m_Inputs, &entityClass.m_Outputs })
 			{
-				for (const auto& line : *lines)
-					output << line << "\n";
+				for (const auto& io : *list)
+					output << io.m_Line << "\n";
 			}
 
 			output << "]\n\n";
@@ -766,6 +909,8 @@ bool Dump()
 	}
 
 	spdlog::info("Wrote {} entity classes from {} modules to entities", count, entities.size());
+
+	Globals::schemasJson["entities"] = GetEntitiesJson(entities);
 	return true;
 }
 

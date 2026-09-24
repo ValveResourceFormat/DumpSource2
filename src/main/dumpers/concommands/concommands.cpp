@@ -37,6 +37,7 @@
 #include <iostream>
 #include <map>
 #include <optional>
+#include <string_view>
 #include <unordered_set>
 #include "gamedata.h"
 #include "modules.h"
@@ -136,107 +137,81 @@ static std::string FormatNumber(T value)
 		return std::to_string(value);
 }
 
-// Writes a numeric value with its min and max, the member selects which CVValue_t union member to print
 template <typename T>
-static void WriteMinMaxValue(T CVValue_t::* member, const std::string& flags, const CVValue_t* value, const CVValue_t* minValue, const CVValue_t* maxValue, std::ostream& stream)
+static std::string FormatVector(const T& vector, int count)
 {
-	stream << " " << FormatNumber(value->*member) << " (";
+	std::string text = "[";
+	for (int i = 0; i < count; i++)
+		text += (i ? ", " : "") + FormatFloat(vector[i]);
 
-	if (minValue)
-		stream << "min: " << FormatNumber(minValue->*member);
-
-	if (maxValue)
-	{
-		if (minValue)
-			stream << ", ";
-		stream << "max: " << FormatNumber(maxValue->*member);
-	}
-
-	if (minValue || maxValue)
-		stream << ", ";
-
-	stream << flags;
-	stream << ")";
+	return text + "]";
 }
 
-void WriteValueLine(EConVarType type, const std::string& flags, const CVValue_t* value, const CVValue_t* minValue, const CVValue_t* maxValue, std::ostream& stream)
+struct ConVarValue_t
+{
+	const char* m_pszType; // As named in schemas.json
+	std::string m_Text;    // The same in convars.txt and schemas.json
+	bool m_bHasMinMax;     // Only numbers have a min and max
+};
+
+static ConVarValue_t FormatValue(EConVarType type, const CVValue_t* value)
 {
 	switch (type)
 	{
 		case EConVarType_Bool:
-		{
-			stream << " " << (value->m_bValue ? "true" : "false") << " (";
-			stream << flags;
-			stream << ")";
-			break;
-		}
+			return { "bool", value->m_bValue ? "true" : "false", false };
 		case EConVarType_Int16:
-			WriteMinMaxValue(&CVValue_t::m_i16Value, flags, value, minValue, maxValue, stream);
-			break;
+			return { "int16", FormatNumber(value->m_i16Value), true };
+		case EConVarType_UInt16:
+			return { "uint16", FormatNumber(value->m_u16Value), true };
 		case EConVarType_Int32:
-			WriteMinMaxValue(&CVValue_t::m_i32Value, flags, value, minValue, maxValue, stream);
-			break;
+			return { "int32", FormatNumber(value->m_i32Value), true };
 		case EConVarType_UInt32:
-			WriteMinMaxValue(&CVValue_t::m_u32Value, flags, value, minValue, maxValue, stream);
-			break;
+			return { "uint32", FormatNumber(value->m_u32Value), true };
 		case EConVarType_Int64:
-			WriteMinMaxValue(&CVValue_t::m_i64Value, flags, value, minValue, maxValue, stream);
-			break;
+			return { "int64", FormatNumber(value->m_i64Value), true };
 		case EConVarType_UInt64:
-			WriteMinMaxValue(&CVValue_t::m_u64Value, flags, value, minValue, maxValue, stream);
-			break;
+			return { "uint64", FormatNumber(value->m_u64Value), true };
 		case EConVarType_Float32:
-			WriteMinMaxValue(&CVValue_t::m_fl32Value, flags, value, minValue, maxValue, stream);
-			break;
+			return { "float32", FormatNumber(value->m_fl32Value), true };
 		case EConVarType_Float64:
-			WriteMinMaxValue(&CVValue_t::m_fl64Value, flags, value, minValue, maxValue, stream);
-			break;
+			return { "float64", FormatNumber(value->m_fl64Value), true };
 		case EConVarType_String:
-		{
-			stream << " \"" << (value->m_StringValue.m_pString ? value->m_StringValue.m_pString : "") << "\"" << " (";
-			stream << flags;
-			stream << ")";
-			break;
-		}
+			return { "string", value->m_StringValue.m_pString ? value->m_StringValue.m_pString : "", false };
 		case EConVarType_Color:
-		{
-			stream << " [" << value->m_clrValue.r() << ", " << value->m_clrValue.g() << ", " << value->m_clrValue.b() << ", " << value->m_clrValue.a() << "]" << " (";
-			stream << flags;
-			stream << ")";
-			break;
-		}
+			return { "color", fmt::format("[{}, {}, {}, {}]", value->m_clrValue.r(), value->m_clrValue.g(), value->m_clrValue.b(), value->m_clrValue.a()), false };
 		case EConVarType_Vector2:
-		{
-			stream << " [" << FormatFloat(value->m_vec2Value.x) << ", " << FormatFloat(value->m_vec2Value.y) << "]" << " (";
-			stream << flags;
-			stream << ")";
-			break;
-		}
+			return { "vector2", FormatVector(value->m_vec2Value, 2), false };
 		case EConVarType_Vector3:
-		{
-			stream << " [" << FormatFloat(value->m_vec3Value.x) << ", " << FormatFloat(value->m_vec3Value.y) << ", " << FormatFloat(value->m_vec3Value.z) << "]" << " (";
-			stream << flags;
-			stream << ")";
-			break;
-		}
+			return { "vector3", FormatVector(value->m_vec3Value, 3), false };
 		case EConVarType_Vector4:
-		{
-			stream << " [" << FormatFloat(value->m_vec4Value.x) << ", " << FormatFloat(value->m_vec4Value.y) << ", " << FormatFloat(value->m_vec4Value.z) << ", " << FormatFloat(value->m_vec4Value.w) << "]" << " (";
-			stream << flags;
-			stream << ")";
-			break;
-		}
+			return { "vector4", FormatVector(value->m_vec4Value, 4), false };
 		case EConVarType_Qangle:
-		{
-			stream << " [" << FormatFloat(value->m_angValue.x) << ", " << FormatFloat(value->m_angValue.y) << ", " << FormatFloat(value->m_angValue.z) << "]" << " (";
-			stream << flags;
-			stream << ")";
-			break;
-		}
+			return { "qangle", FormatVector(value->m_angValue, 3), false };
+#ifndef GAME_DEADLOCK
+		case EConVarType_VectorWS:
+			return { "vector_ws", FormatVector(value->m_vecwsValue, 3), false };
+#endif
+		// ValidateConVar only lets known types through
 		default:
-			stream << " UNKNOWN VALUE TYPE";
-			break;
+			return { "unknown", {}, false };
 	}
+}
+
+void WriteValueLine(const ConVarValue_t& value, const std::optional<std::string>& minValue, const std::optional<std::string>& maxValue, const std::string& flags, std::ostream& stream)
+{
+	stream << " " << (std::string_view(value.m_pszType) == "string" ? "\"" + value.m_Text + "\"" : value.m_Text) << " (";
+
+	if (minValue)
+		stream << "min: " << *minValue;
+
+	if (maxValue)
+		stream << (minValue ? ", " : "") << "max: " << *maxValue;
+
+	if (minValue || maxValue)
+		stream << ", ";
+
+	stream << flags << ")";
 }
 
 void FixNewlineTabbing(std::string& str)
@@ -480,7 +455,8 @@ static uint64 GetModuleRegisterFlags(const char* module)
 
 // Merges declarations of the same name like ICvar does in registration order: references are ignored, flags are OR'd
 // except for a few where the later declaration wins, and default/min/max/help come from the first one that has them
-static QueuedEntry_t MergeQueued(const std::vector<QueuedEntry_t*>& entries)
+// modules gets the modules that declare it
+static QueuedEntry_t MergeQueued(const std::vector<QueuedEntry_t*>& entries, std::set<std::string>& modules)
 {
 	constexpr uint64 laterWins = FCVAR_CHEAT | FCVAR_REPLICATED | FCVAR_DONTRECORD | FCVAR_ARCHIVE | FCVAR_PER_USER;
 	constexpr uint64 stripped = FCVAR_INITIAL_SETVALUE | FCVAR_PERFORMING_CALLBACKS;
@@ -492,6 +468,7 @@ static QueuedEntry_t MergeQueued(const std::vector<QueuedEntry_t*>& entries)
 		if (entry->m_nFlags & FCVAR_REFERENCE)
 			continue;
 
+		modules.insert(entry->m_pszModule);
 		auto flags = (entry->m_nFlags | GetModuleRegisterFlags(entry->m_pszModule)) & ~stripped;
 
 		if (!merged)
@@ -563,11 +540,16 @@ static void WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 	spdlog::info("Wrote {} {}s to {}", byName.size(), queue.m_pszKind, queue.m_pszFileName);
 
 	std::ofstream output(Globals::outputPath / queue.m_pszFileName);
+	auto items = nlohmann::json::array();
 
 	for (const auto& [name, entries] : byName)
 	{
-		auto entry = MergeQueued(entries);
+		std::set<std::string> modules;
+		auto entry = MergeQueued(entries, modules);
 		output << name;
+
+		nlohmann::json item;
+		item["name"] = name;
 
 		auto flagNames = GetFlagNames(entry.m_nFlags);
 
@@ -582,9 +564,25 @@ static void WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 		if (isConVar)
 		{
 			// cl_color has a random default value on each start.
+			const bool hasDefault = entry.m_Default.m_bSet && name != "cl_color";
 			alignas(CVValue_t) static const uint8 empty[sizeof(CVValue_t)] = {};
-			auto value = entry.m_Default.m_bSet && name != "cl_color" ? entry.m_Default.Get() : (const CVValue_t*)empty;
-			WriteValueLine(entry.m_eType, flags, value, entry.m_Min.Get(), entry.m_Max.Get(), output);
+			auto value = FormatValue(entry.m_eType, hasDefault ? entry.m_Default.Get() : (const CVValue_t*)empty);
+
+			std::optional<std::string> minValue, maxValue;
+			if (value.m_bHasMinMax && entry.m_Min.Get())
+				minValue = FormatValue(entry.m_eType, entry.m_Min.Get()).m_Text;
+			if (value.m_bHasMinMax && entry.m_Max.Get())
+				maxValue = FormatValue(entry.m_eType, entry.m_Max.Get()).m_Text;
+
+			WriteValueLine(value, minValue, maxValue, flags, output);
+
+			item["type"] = value.m_pszType;
+			if (hasDefault)
+				item["default"] = value.m_Text;
+			if (minValue)
+				item["min"] = *minValue;
+			if (maxValue)
+				item["max"] = *maxValue;
 		}
 		else
 		{
@@ -592,7 +590,19 @@ static void WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 		}
 
 		WriteHelp(name.c_str(), entry.m_Help.c_str(), output);
+
+		item["flags"] = flagNames;
+		item["modules"] = modules;
+
+		// Some help texts end in a newline or space
+		const auto helpStart = entry.m_Help.find_first_not_of(" \t\r\n");
+		if (helpStart != std::string::npos)
+			item["help"] = entry.m_Help.substr(helpStart, entry.m_Help.find_last_not_of(" \t\r\n") - helpStart + 1);
+
+		items.push_back(std::move(item));
 	}
+
+	Globals::schemasJson[isConVar ? "convars" : "commands"] = std::move(items);
 }
 
 // Returns false if either could not be dumped, which is then not written to keep the previous dump

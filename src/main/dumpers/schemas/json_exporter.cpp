@@ -230,32 +230,14 @@ void DumpEnums(const std::vector<IntermediateSchemaEnum>& enums, json& enumsArra
 
 void Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<IntermediateSchemaClass>& classes)
 {
-	nlohmann::ordered_json root;
 	json classesArray = json::array();
 	json enumsArray = json::array();
 
 	DumpClasses(classes, classesArray);
 	DumpEnums(enums, enumsArray);
 
-	root["generator"] = "https://github.com/ValveResourceFormat/DumpSource2";
-
-	if (!Globals::sourceRevision.empty())
-		root["revision"] = std::stoi(Globals::sourceRevision);
-
-	if (!Globals::versionDate.empty())
-		root["version_date"] = Globals::versionDate;
-
-	if (!Globals::versionTime.empty())
-		root["version_time"] = Globals::versionTime;
-
-	root["classes"] = classesArray;
-	root["enums"] = enumsArray;
-
-	std::ofstream output(Globals::outputPath / "schemas.json");
-	output << root.dump(-1);
-	output.close();
-
-	spdlog::info("Wrote schemas.json ({} classes, {} enums)", classesArray.size(), enumsArray.size());
+	Globals::schemasJson["classes"] = std::move(classesArray);
+	Globals::schemasJson["enums"] = std::move(enumsArray);
 }
 
 } // namespace Dumpers::Schemas::JsonExporter

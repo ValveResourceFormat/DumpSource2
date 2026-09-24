@@ -21,12 +21,17 @@
 #include <string>
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <nlohmann/json.hpp>
 
 namespace Globals
 {
 
 inline std::filesystem::path outputPath;
 inline std::stringstream stringsIgnoreStream;
+
+// Top-level arrays of schemas.json by name, like classes or convars, written only when every dumper succeeded
+inline std::map<std::string, nlohmann::json> schemasJson;
 
 inline std::string sourceRevision;
 inline std::string versionDate;

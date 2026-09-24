@@ -44,6 +44,30 @@ void WriteStringsIgnore()
 	file << Globals::stringsIgnoreStream.str();
 }
 
+void WriteSchemasJson()
+{
+	nlohmann::ordered_json root;
+	root["generator"] = "https://github.com/ValveResourceFormat/DumpSource2";
+
+	if (!Globals::sourceRevision.empty())
+		root["revision"] = std::stoi(Globals::sourceRevision);
+
+	if (!Globals::versionDate.empty())
+		root["version_date"] = Globals::versionDate;
+
+	if (!Globals::versionTime.empty())
+		root["version_time"] = Globals::versionTime;
+
+	for (const auto& [name, section] : Globals::schemasJson)
+		root[name] = section;
+
+	std::ofstream output(Globals::outputPath / "schemas.json");
+	output << root.dump(-1);
+	output.close();
+
+	spdlog::info("Wrote schemas.json");
+}
+
 int main(int argc, char** argv)
 {
 	spdlog::cfg::load_env_levels("LOGLEVEL");
@@ -129,9 +153,14 @@ int main(int argc, char** argv)
 	WriteStringsIgnore();
 
 	if (exitCode == 0)
+	{
+		WriteSchemasJson();
 		spdlog::info("Dumped successfully");
+	}
 	else
-		spdlog::critical("Dump is incomplete, exiting with code {}", exitCode);
+	{
+		spdlog::critical("Dump is incomplete, not writing schemas.json, exiting with code {}", exitCode);
+	}
 
 	// skips atexit calls that cause a segfault only while unregistering cvar callbacks
 #ifdef WIN32
