@@ -17,7 +17,7 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-// Yes this is shit, no we can't make it better.
+// The queued default, min and max values are private in ConVarValueInfo_t, which has no getters
 #define _ALLOW_KEYWORD_MACROS 1
 #define private public
 #include <icvar.h>
@@ -252,38 +252,6 @@ std::string EscapeDescription(std::string str)
 	return str;
 }
 
-// Copied when read, the queue blocks are freed once the module calls ConVar_Register
-struct QueuedValue_t
-{
-	bool m_bSet = false;
-	bool m_bIsString = false;
-	alignas(CVValue_t) uint8 m_Value[sizeof(CVValue_t)] = {};
-	std::string m_String;
-
-	void Set(EConVarType type, const uint8* value)
-	{
-		m_bSet = true;
-		memcpy(m_Value, value, sizeof(m_Value));
-
-		if (type == EConVarType_String)
-		{
-			m_bIsString = true;
-			auto str = ((const CVValue_t*)value)->m_StringValue.m_pString;
-			m_String = str ? str : "";
-		}
-	}
-
-	const CVValue_t* Get()
-	{
-		if (!m_bSet)
-			return nullptr;
-
-		if (m_bIsString)
-			((CVValue_t*)m_Value)->m_StringValue.m_pString = m_String.data();
-		return (const CVValue_t*)m_Value;
-	}
-};
-
 struct QueuedEntry_t
 {
 	const char* m_pszModule;
@@ -291,9 +259,10 @@ struct QueuedEntry_t
 	std::string m_Help;
 	uint64 m_nFlags;
 	EConVarType m_eType = EConVarType_Invalid;
-	QueuedValue_t m_Default;
-	QueuedValue_t m_Min;
-	QueuedValue_t m_Max;
+	// Formatted when read, the queue blocks are freed once the module calls ConVar_Register
+	std::optional<std::string> m_Default;
+	std::optional<std::string> m_Min;
+	std::optional<std::string> m_Max;
 };
 
 struct Queue_t
@@ -314,11 +283,11 @@ static QueuedEntry_t CopyQueued(const char* module, const ConVarRegList::Entry_t
 	QueuedEntry_t entry{ module, creation.m_pszName, creation.m_pszHelpString ? creation.m_pszHelpString : "", creation.m_nFlags, info.m_eVarType };
 
 	if (info.m_bHasDefault)
-		entry.m_Default.Set(info.m_eVarType, info.m_defaultValue);
+		entry.m_Default = FormatValue(info.m_eVarType, (const CVValue_t*)info.m_defaultValue).m_Text;
 	if (info.m_bHasMin)
-		entry.m_Min.Set(info.m_eVarType, info.m_minValue);
+		entry.m_Min = FormatValue(info.m_eVarType, (const CVValue_t*)info.m_minValue).m_Text;
 	if (info.m_bHasMax)
-		entry.m_Max.Set(info.m_eVarType, info.m_maxValue);
+		entry.m_Max = FormatValue(info.m_eVarType, (const CVValue_t*)info.m_maxValue).m_Text;
 
 	return entry;
 }
@@ -480,11 +449,11 @@ static QueuedEntry_t MergeQueued(const std::vector<QueuedEntry_t*>& entries, std
 
 		merged->m_nFlags = flags | (merged->m_nFlags & ~laterWins);
 
-		if (!merged->m_Default.m_bSet)
+		if (!merged->m_Default)
 			merged->m_Default = entry->m_Default;
-		if (!merged->m_Min.m_bSet)
+		if (!merged->m_Min)
 			merged->m_Min = entry->m_Min;
-		if (!merged->m_Max.m_bSet)
+		if (!merged->m_Max)
 			merged->m_Max = entry->m_Max;
 		if (merged->m_Help.empty())
 			merged->m_Help = entry->m_Help;
@@ -564,15 +533,20 @@ static void WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 		if (isConVar)
 		{
 			// cl_color has a random default value on each start.
-			const bool hasDefault = entry.m_Default.m_bSet && name != "cl_color";
+			const bool hasDefault = entry.m_Default && name != "cl_color";
+
+			// convars.txt writes the type's empty value when there is no default
 			alignas(CVValue_t) static const uint8 empty[sizeof(CVValue_t)] = {};
-			auto value = FormatValue(entry.m_eType, hasDefault ? entry.m_Default.Get() : (const CVValue_t*)empty);
+			auto value = FormatValue(entry.m_eType, (const CVValue_t*)empty);
+			if (hasDefault)
+				value.m_Text = *entry.m_Default;
 
 			std::optional<std::string> minValue, maxValue;
-			if (value.m_bHasMinMax && entry.m_Min.Get())
-				minValue = FormatValue(entry.m_eType, entry.m_Min.Get()).m_Text;
-			if (value.m_bHasMinMax && entry.m_Max.Get())
-				maxValue = FormatValue(entry.m_eType, entry.m_Max.Get()).m_Text;
+			if (value.m_bHasMinMax)
+			{
+				minValue = entry.m_Min;
+				maxValue = entry.m_Max;
+			}
 
 			WriteValueLine(value, minValue, maxValue, flags, output);
 
