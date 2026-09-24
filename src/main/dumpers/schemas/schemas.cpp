@@ -62,6 +62,14 @@ static const char* ValidateClass(const SchemaClassInfoData_t* classInfo)
 	if (classInfo->m_nFieldCount > 0 && !Modules::FindModuleContaining(classInfo->m_pFields))
 		return "fields pointer";
 
+	for (uint16_t i = 0; i < classInfo->m_nBaseClassCount; i++)
+	{
+		const auto baseClass = classInfo->m_pBaseClasses[i].m_pClass;
+
+		if (baseClass && (!Modules::FindModuleContaining(baseClass) || !Modules::IsValidName(baseClass->m_pszName) || !Modules::IsValidName(baseClass->m_pszProjectName)))
+			return "base class";
+	}
+
 	for (uint16_t i = 0; i < classInfo->m_nFieldCount; i++)
 	{
 		const auto& field = classInfo->m_pFields[i];
@@ -107,6 +115,7 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 	{
 		const auto classInfo = typeScope->m_DeclaredClasses.m_Map.Element(iter)->m_pClassInfo;
 
+		// Declared by name only
 		if (!classInfo)
 			continue;
 
@@ -179,6 +188,10 @@ static bool DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<Intermediat
 	FOR_EACH_MAP(typeScope->m_DeclaredEnums.m_Map, iter)
 	{
 		const auto enumInfo = typeScope->m_DeclaredEnums.m_Map.Element(iter)->m_pEnumInfo;
+
+		// Declared by name only
+		if (!enumInfo)
+			continue;
 
 		if (auto invalid = ValidateEnum(enumInfo))
 		{
@@ -285,7 +298,9 @@ bool Dump()
 	enums.erase(std::unique(enums.begin(), enums.end(), sameModuleAndName), enums.end());
 	classes.erase(std::unique(classes.begin(), classes.end(), sameModuleAndName), classes.end());
 
-	FilesystemExporter::Dump(enums, classes);
+	if (!FilesystemExporter::Dump(enums, classes))
+		return false;
+
 	JsonExporter::Dump(enums, classes);
 	return true;
 }

@@ -22,6 +22,7 @@
 #include "globalvariables.h"
 #include "modules.h"
 #include "interfaces.h"
+#include "output.h"
 #include "dumpers/module_metadata/module_metadata.h"
 #include "dumpers/schemas/schemas.h"
 #include <entity2/entityclass.h>
@@ -56,7 +57,6 @@ using namespace GameData;
 // An input or output as an FGD line and for schemas.json
 struct EntityIO_t
 {
-	std::string m_Name;
 	std::string m_Line;
 	nlohmann::json m_Json;
 };
@@ -573,7 +573,7 @@ static bool AddInputsAndOutputs(const CModule& module, const std::string& rootNa
 		if (!comment.empty())
 			line += " // " + comment;
 
-		(isInput ? entity->second.m_Inputs : entity->second.m_Outputs).push_back({ name, std::move(line), std::move(json) });
+		(isInput ? entity->second.m_Inputs : entity->second.m_Outputs).push_back({ std::move(line), std::move(json) });
 		entity->second.m_Strings.push_back(name);
 		(isInput ? inputs : outputs)++;
 	}
@@ -683,7 +683,7 @@ static bool AddClassKeyFields(const CEntityClassInfo* classInfo, const CEntityCl
 	return true;
 }
 
-// Entities for schemas.json, keyed by their C++ class which is also their schema class
+// Inputs or outputs for schemas.json, moved out of the list
 static nlohmann::json GetIOJson(std::vector<EntityIO_t>& list)
 {
 	auto array = nlohmann::json::array();
@@ -693,7 +693,7 @@ static nlohmann::json GetIOJson(std::vector<EntityIO_t>& list)
 	return array;
 }
 
-// Entities for schemas.json, keyed by their C++ class which is also their schema class. Moves the JSON out of the classes.
+// Entities for schemas.json, each with its C++ class which is also its schema class. Moves the JSON out of the classes.
 static nlohmann::json GetEntitiesJson(std::map<std::string, std::map<std::string, EntityClass_t>>& entities)
 {
 	auto array = nlohmann::json::array();
@@ -767,13 +767,14 @@ bool Dump()
 		auto head = *Modules::GetGlobalFromSignatureMatch<CEntityClass*>(match);
 		spdlog::debug("Found entity class list in {}, {}", module.m_pszModule, head ? "not empty" : "empty");
 		auto& classes = entities[module.m_pszModule];
+		bool moduleFailed = false;
 
 		for (auto entityClass = head; entityClass; entityClass = entityClass->m_pNext)
 		{
 			if (auto invalid = ValidateEntityClass(module, entityClass))
 			{
 				spdlog::critical("Entity class list in {} has an invalid {}, CEntityClass in the SDK needs updating", module.m_pszModule, invalid);
-				failed = true;
+				moduleFailed = true;
 				break;
 			}
 
@@ -787,12 +788,19 @@ bool Dump()
 				entity.m_Strings.push_back(overrides->pszOverrideComponent);
 			}
 
-			classes[GetFGDName(entityClass->m_pClassInfo)] = std::move(entity);
+			auto fgdName = GetFGDName(entityClass->m_pClassInfo);
+			if (!classes.try_emplace(fgdName, std::move(entity)).second)
+			{
+				spdlog::critical("Entity class list in {} has {} twice", module.m_pszModule, fgdName);
+				moduleFailed = true;
+				break;
+			}
 		}
 
 		// Some modules, like engine2, link the entity system without any entity classes
-		if (failed || classes.empty())
+		if (moduleFailed || classes.empty())
 		{
+			failed |= moduleFailed;
 			entities.erase(module.m_pszModule);
 			continue;
 		}
@@ -814,22 +822,35 @@ bool Dump()
 				base = base->m_pBaseClassInfo;
 
 			if (base)
+			{
 				entity.m_BaseName = GetFGDName(base);
+			}
+			else if (!rootName.empty())
+			{
+				spdlog::critical("Entity classes in {} have more than one root, {} and {}", module.m_pszModule, rootName, name);
+				moduleFailed = true;
+				break;
+			}
 			else
+			{
 				rootName = name;
+			}
 
 			if (!AddClassKeyFields(entity.m_pClass->m_pClassInfo, base, enums, entity))
 			{
-				failed = true;
+				moduleFailed = true;
 				break;
 			}
 		}
 
-		if (!failed && !AddInputsAndOutputs(module, rootName, classes))
+		if (moduleFailed || !AddInputsAndOutputs(module, rootName, classes))
+		{
 			failed = true;
+			continue;
+		}
 
-		// By name, the rest of the line only orders inputs with the same name
-		auto byName = [](const EntityIO_t& a, const EntityIO_t& b) { return std::tie(a.m_Name, a.m_Line) < std::tie(b.m_Name, b.m_Line); };
+		// Lines start with the name, so this sorts by name
+		auto byName = [](const EntityIO_t& a, const EntityIO_t& b) { return a.m_Line < b.m_Line; };
 		for (auto& [name, entity] : classes)
 		{
 			std::sort(entity.m_Inputs.begin(), entity.m_Inputs.end(), byName);
@@ -850,18 +871,15 @@ bool Dump()
 	}
 
 	const auto outputPath = Globals::outputPath / "entities";
-	if (!std::filesystem::is_directory(outputPath) && !std::filesystem::create_directory(outputPath))
-	{
-		spdlog::critical("Failed to create {}", outputPath.generic_string());
-		return false;
-	}
+	std::filesystem::create_directories(outputPath);
 
 	size_t count = 0;
 
 	// One FGD per module, the client and server classes of an entity differ
 	for (auto& [module, classes] : entities)
 	{
-		std::ofstream output(outputPath / (module + ".fgd"));
+		const auto path = outputPath / (module + ".fgd");
+		std::ofstream output(path);
 		output << "// Dumped by https://github.com/ValveResourceFormat/DumpSource2\n\n";
 
 		std::unordered_set<std::string> written;
@@ -905,8 +923,13 @@ bool Dump()
 		for (const auto& [designName, entityClass] : classes)
 			writeClass(designName);
 
+		if (!CloseOutput(output, path))
+			return false;
+
 		count += classes.size();
 	}
+
+	RemoveOrphanFiles(outputPath, entities, "entities");
 
 	spdlog::info("Wrote {} entity classes from {} modules to entities", count, entities.size());
 

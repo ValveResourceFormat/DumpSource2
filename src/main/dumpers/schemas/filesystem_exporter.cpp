@@ -19,13 +19,12 @@
 
 #include "filesystem_exporter.h"
 #include "globalvariables.h"
-#include "interfaces.h"
+#include "output.h"
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <unordered_set>
 #include <algorithm>
-#include <optional>
 #include <spdlog/spdlog.h>
 #include "metadata_stringifier.h"
 
@@ -34,7 +33,7 @@ namespace Dumpers::Schemas::FilesystemExporter
 
 static std::map<std::string, int> g_unknownMetadataCounts;
 
-std::string CommentBlock(std::string str)
+static std::string CommentBlock(std::string str)
 {
 	size_t pos = 0;
 	while ((pos = str.find('\n', pos)) != std::string::npos)
@@ -46,7 +45,7 @@ std::string CommentBlock(std::string str)
 	return str;
 }
 
-void OutputMetadataEntry(const IntermediateMetadata& entry, std::ofstream& output, bool tabulate)
+static void OutputMetadataEntry(const IntermediateMetadata& entry, std::ofstream& output, bool tabulate)
 {
 	output << (tabulate ? "\t" : "") << "// " << entry.name;
 
@@ -66,28 +65,28 @@ void OutputMetadataEntry(const IntermediateMetadata& entry, std::ofstream& outpu
 	output << "\n";
 }
 
-void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, std::filesystem::path schemaPath, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
+// The file for a class or enum, recorded so outdated files can be removed
+static std::filesystem::path GetOutputPath(const std::filesystem::path& schemaPath, const std::string& module, std::string name, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
+{
+	// Some classes have :: in them which we can't save.
+	std::replace(name.begin(), name.end(), ':', '_');
+	auto [files, isNewModule] = foundFiles.try_emplace(module);
+	files->second.insert(name);
+
+	if (isNewModule)
+		std::filesystem::create_directories(schemaPath / module);
+
+	return (schemaPath / module / name).replace_extension(".h");
+}
+
+static bool DumpClasses(const std::vector<IntermediateSchemaClass>& classes, const std::filesystem::path& schemaPath, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
 {
 	for (const auto& intermediateClass : classes)
 	{
-		if (!std::filesystem::is_directory(schemaPath / intermediateClass.module))
-			if (!std::filesystem::create_directory(schemaPath / intermediateClass.module))
-			{
-				spdlog::error("Failed to create directory for class module '{}'", intermediateClass.module);
-				continue;
-			}
-
-		// Some classes have :: in them which we can't save.
-		auto sanitizedFileName = intermediateClass.name;
-		std::replace(sanitizedFileName.begin(), sanitizedFileName.end(), ':', '_');
-
-		// We save the file in a map so that we know which files are outdated and should be removed
-		foundFiles[intermediateClass.module].insert(sanitizedFileName);
-
-		std::ofstream output((schemaPath / intermediateClass.module / sanitizedFileName).replace_extension(".h"));
+		const auto path = GetOutputPath(schemaPath, intermediateClass.module, intermediateClass.name, foundFiles);
+		std::ofstream output(path);
 
 		// Output metadata entries as comments before the class definition
-		spdlog::trace("Dumping class: '{}'", intermediateClass.name);
 		for (const auto& metadata : intermediateClass.metadata)
 		{
 			OutputMetadataEntry(metadata, output, false);
@@ -114,7 +113,6 @@ void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, std::files
 
 		for (const auto& field : intermediateClass.fields)
 		{
-			spdlog::trace("Dumping field: '{}' for class: '{}'", field.name, intermediateClass.name);
 			// Output metadata entries as comments before the field definition
 			for (const auto& metadata : field.metadata)
 			{
@@ -126,30 +124,21 @@ void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, std::files
 		}
 
 		output << "};\n";
+
+		if (!CloseOutput(output, path))
+			return false;
 	}
+
+	return true;
 }
 
-void DumpEnums(const std::vector<IntermediateSchemaEnum>& enums, std::filesystem::path schemaPath, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
+static bool DumpEnums(const std::vector<IntermediateSchemaEnum>& enums, const std::filesystem::path& schemaPath, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
 {
 	for (const auto& intermediateEnum : enums)
 	{
-		if (!std::filesystem::is_directory(schemaPath / intermediateEnum.module))
-			if (!std::filesystem::create_directory(schemaPath / intermediateEnum.module))
-			{
-				spdlog::error("Failed to create directory for enum module '{}'", intermediateEnum.module);
-				continue;
-			}
+		const auto path = GetOutputPath(schemaPath, intermediateEnum.module, intermediateEnum.name, foundFiles);
+		std::ofstream output(path);
 
-		// Some classes have :: in them which we can't save.
-		auto sanitizedFileName = intermediateEnum.name;
-		std::replace(sanitizedFileName.begin(), sanitizedFileName.end(), ':', '_');
-
-		// We save the file in a map so that we know which files are outdated and should be removed
-		foundFiles[intermediateEnum.module].insert(sanitizedFileName);
-
-		std::ofstream output((schemaPath / intermediateEnum.module / sanitizedFileName).replace_extension(".h"));
-
-		spdlog::trace("Dumping enum: '{}'", intermediateEnum.name);
 		for (const auto& metadata : intermediateEnum.metadata)
 		{
 			OutputMetadataEntry(metadata, output, false);
@@ -171,24 +160,22 @@ void DumpEnums(const std::vector<IntermediateSchemaEnum>& enums, std::filesystem
 		}
 
 		output << "};\n";
+
+		if (!CloseOutput(output, path))
+			return false;
 	}
+
+	return true;
 }
 
-void Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<IntermediateSchemaClass>& classes)
+bool Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<IntermediateSchemaClass>& classes)
 {
 	const auto schemaPath = Globals::outputPath / "schemas";
-
-	if (!std::filesystem::is_directory(schemaPath))
-		if (!std::filesystem::create_directory(schemaPath))
-		{
-			spdlog::error("Failed to create {}", schemaPath.generic_string());
-			return;
-		}
-
 	std::map<std::string, std::unordered_set<std::string>> foundFiles;
+	std::filesystem::create_directories(schemaPath);
 
-	DumpClasses(classes, schemaPath, foundFiles);
-	DumpEnums(enums, schemaPath, foundFiles);
+	if (!DumpClasses(classes, schemaPath, foundFiles) || !DumpEnums(enums, schemaPath, foundFiles))
+		return false;
 
 	for (const auto& [name, count] : g_unknownMetadataCounts)
 		spdlog::warn("Metadata '{}' is not in metadatalist.h ({} usages), value {}", name, count, g_unknownMetadataSamples[name]);
@@ -196,28 +183,20 @@ void Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<In
 	for (const auto& entry : std::filesystem::directory_iterator(schemaPath))
 	{
 		auto projectName = entry.path().filename().string();
-		bool isInMap = foundFiles.find(projectName) != foundFiles.end();
+		auto files = foundFiles.find(projectName);
 
-		if (entry.is_directory() && !isInMap)
+		if (entry.is_directory() && files == foundFiles.end())
 		{
 			spdlog::info("Removing orphan schema folder {}", entry.path().generic_string());
 			std::filesystem::remove_all(entry.path());
 		}
-		else if (isInMap)
+		else if (files != foundFiles.end())
 		{
-
-			for (const auto& typeScopePath : std::filesystem::directory_iterator(entry.path()))
-			{
-				auto& filesSet = foundFiles[projectName];
-
-				if (filesSet.find(typeScopePath.path().stem().string()) == filesSet.end())
-				{
-					spdlog::info("Removing orphan schema file {}", typeScopePath.path().generic_string());
-					std::filesystem::remove(typeScopePath.path());
-				}
-			}
+			RemoveOrphanFiles(entry.path(), files->second, "schema");
 		}
 	}
+
+	return true;
 }
 
 } // namespace Dumpers::Schemas::FilesystemExporter

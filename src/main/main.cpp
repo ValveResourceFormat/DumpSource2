@@ -17,10 +17,10 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "main.h"
 #include "interfaces.h"
 #include "globalvariables.h"
 #include "appframework.h"
+#include "output.h"
 #include <spdlog/spdlog.h>
 #include <spdlog/cfg/env.h>
 
@@ -33,18 +33,15 @@
 
 #include <fmt/format.h>
 
-void Usage()
+static bool WriteStringsIgnore()
 {
-	printf("Usage: DumpSource2 <output path>\n");
-}
-
-void WriteStringsIgnore()
-{
-	std::ofstream file(Globals::outputPath / ".stringsignore");
+	const auto path = Globals::outputPath / ".stringsignore";
+	std::ofstream file(path);
 	file << Globals::stringsIgnoreStream.str();
+	return CloseOutput(file, path);
 }
 
-void WriteSchemasJson()
+static bool WriteSchemasJson()
 {
 	nlohmann::ordered_json root;
 	root["generator"] = "https://github.com/ValveResourceFormat/DumpSource2";
@@ -61,21 +58,51 @@ void WriteSchemasJson()
 	for (const auto& [name, section] : Globals::schemasJson)
 		root[name] = section;
 
-	std::ofstream output(Globals::outputPath / "schemas.json");
-	output << root.dump(-1);
-	output.close();
+	const auto path = Globals::outputPath / "schemas.json";
+	std::ofstream output(path);
+	output << root;
+
+	if (!CloseOutput(output, path))
+		return false;
 
 	spdlog::info("Wrote schemas.json");
+	return true;
 }
 
-int main(int argc, char** argv)
+// Parses steam.inf for version info
+static void ReadSteamInf()
 {
-	spdlog::cfg::load_env_levels("LOGLEVEL");
+	auto steamInfPath = std::filesystem::current_path() / fmt::format("../../{}/steam.inf", GAME_PATH);
+	std::ifstream steamInf(steamInfPath);
+	if (!steamInf.is_open())
+	{
+		spdlog::warn("Failed to open {}, the version will be missing from schemas.json", steamInfPath.lexically_normal().generic_string());
+		return;
+	}
 
+	std::string line;
+	while (std::getline(steamInf, line))
+	{
+		if (!line.empty() && line.back() == '\r')
+			line.pop_back();
+
+		if (line.starts_with("SourceRevision="))
+			Globals::sourceRevision = line.substr(15);
+		else if (line.starts_with("VersionDate="))
+			Globals::versionDate = line.substr(12);
+		else if (line.starts_with("VersionTime="))
+			Globals::versionTime = line.substr(12);
+	}
+
+	spdlog::info("Game revision {} built {} {}", Globals::sourceRevision, Globals::versionDate, Globals::versionTime);
+}
+
+static int Run(int argc, char** argv)
+{
 	if (argc <= 1)
 	{
-		Usage();
-		return 0;
+		printf("Usage: DumpSource2 <output path>\n");
+		return 1;
 	}
 
 	Globals::outputPath = argv[1];
@@ -87,30 +114,7 @@ int main(int argc, char** argv)
 	}
 
 	spdlog::info("Dumping {} to {}", GAME_PATH, std::filesystem::absolute(Globals::outputPath).generic_string());
-
-	// Parse steam.inf for version info
-	{
-		auto steamInfPath = std::filesystem::current_path() / fmt::format("../../{}/steam.inf", GAME_PATH);
-		std::ifstream steamInf(steamInfPath);
-		if (steamInf.is_open())
-		{
-			std::string line;
-			while (std::getline(steamInf, line))
-			{
-				if (line.starts_with("SourceRevision="))
-					Globals::sourceRevision = line.substr(15);
-				else if (line.starts_with("VersionDate="))
-					Globals::versionDate = line.substr(12);
-				else if (line.starts_with("VersionTime="))
-					Globals::versionTime = line.substr(12);
-			}
-			spdlog::info("Game revision {} built {} {}", Globals::sourceRevision, Globals::versionDate, Globals::versionTime);
-		}
-		else
-		{
-			spdlog::warn("Failed to open {}, the version will be missing from schemas.json", steamInfPath.lexically_normal().generic_string());
-		}
-	}
+	ReadSteamInf();
 
 	// Each part is dumped independently, so one of them breaking does not lose the others
 	int exitCode = 0;
@@ -120,7 +124,8 @@ int main(int argc, char** argv)
 	if (!Dumpers::ConCommands::Dump())
 		exitCode = 1;
 
-	WriteStringsIgnore();
+	if (!WriteStringsIgnore())
+		exitCode = 1;
 
 	if (InitializeSchemas())
 	{
@@ -130,7 +135,8 @@ int main(int argc, char** argv)
 			exitCode = 1;
 		}
 
-		Dumpers::ModuleMetadata::Dump();
+		if (!Dumpers::ModuleMetadata::Dump())
+			exitCode = 1;
 	}
 	else
 	{
@@ -138,7 +144,8 @@ int main(int argc, char** argv)
 		exitCode = 1;
 	}
 
-	WriteStringsIgnore();
+	if (!WriteStringsIgnore())
+		exitCode = 1;
 
 	// These read more game structs directly, so they run last to not lose the dumps above if they crash
 	if (!Dumpers::Entities::Dump())
@@ -150,16 +157,36 @@ int main(int argc, char** argv)
 	if (!Dumpers::LoggingChannels::Dump())
 		exitCode = 1;
 
-	WriteStringsIgnore();
+	if (!WriteStringsIgnore())
+		exitCode = 1;
 
-	if (exitCode == 0)
-	{
-		WriteSchemasJson();
-		spdlog::info("Dumped successfully");
-	}
-	else
+	if (exitCode != 0)
 	{
 		spdlog::critical("Dump is incomplete, not writing schemas.json, exiting with code {}", exitCode);
+		return exitCode;
+	}
+
+	if (!WriteSchemasJson())
+		return 1;
+
+	spdlog::info("Dumped successfully");
+	return 0;
+}
+
+int main(int argc, char** argv)
+{
+	spdlog::cfg::load_env_levels("LOGLEVEL");
+
+	int exitCode;
+
+	try
+	{
+		exitCode = Run(argc, argv);
+	}
+	catch (const std::exception& e)
+	{
+		spdlog::critical("Unhandled exception: {}", e.what());
+		exitCode = 1;
 	}
 
 	// skips atexit calls that cause a segfault only while unregistering cvar callbacks

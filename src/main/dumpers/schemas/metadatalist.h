@@ -38,9 +38,9 @@ enum class MetadataValueType
 	COLOR,
 	FUNCTION,
 	VARNAME,
+	NETWORK_OVERRIDE,
 	KV3DEFAULTS,
 	SEND_PROXY_RECIPIENTS_FILTER,
-	DEBUGGER_BREAKPOINT
 };
 
 inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
@@ -167,10 +167,11 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MVDataVirtualNodeFactoryFn", MetadataValueType::FUNCTION },
 
 	// VARNAME
-	{ "MNetworkOverride", MetadataValueType::VARNAME },
 	{ "MNetworkVarNames", MetadataValueType::VARNAME },
 	{ "MNetworkVarTypeOverride", MetadataValueType::VARNAME },
-	{ "MParticleDomainTag", MetadataValueType::VARNAME },
+
+	// NETWORK_OVERRIDE
+	{ "MNetworkOverride", MetadataValueType::NETWORK_OVERRIDE },
 
 	// KV3
 	{ "MGetKV3ClassDefaults", MetadataValueType::KV3DEFAULTS },

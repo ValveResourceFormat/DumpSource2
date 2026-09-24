@@ -25,6 +25,7 @@
 #include "globalvariables.h"
 #include <schemasystem/schemasystem.h>
 #include <fmt/format.h>
+#include <algorithm>
 #include <map>
 #include <set>
 #include <fstream>
@@ -37,9 +38,9 @@ using namespace GameData;
 // Some modules crash in Connect without VApplication001
 static DumperApplication g_Application;
 
-std::map<std::string, IAppSystem*> g_factoryMap;
+static std::map<std::string, IAppSystem*> g_factoryMap;
 
-void* AppSystemFactory(const char* pName, int* pReturnCode)
+static void* FindAppSystemInterface(const char* pName)
 {
 	if (!strcmp(pName, CVAR_INTERFACE_VERSION))
 		return Interfaces::cvar;
@@ -58,6 +59,16 @@ void* AppSystemFactory(const char* pName, int* pReturnCode)
 
 	spdlog::trace("Missing {} interface", pName);
 	return nullptr;
+}
+
+static void* AppSystemFactory(const char* pName, int* pReturnCode)
+{
+	auto found = FindAppSystemInterface(pName);
+
+	if (pReturnCode)
+		*pReturnCode = found ? IFACE_OK : IFACE_FAILED;
+
+	return found;
 }
 
 static bool FileContains(const std::filesystem::path& path, std::string_view needle)
@@ -131,8 +142,6 @@ void InitializeModules()
 	std::string failed;
 	for (const auto& module : modules)
 	{
-		spdlog::debug("Loading {}", module.file);
-
 		if (!dlmount(module.file.c_str()))
 		{
 #ifdef _WIN32
@@ -163,7 +172,11 @@ bool InitializeSchemas()
 
 	// schemasystem needs ICvar when connecting
 	g_pCVar = Interfaces::cvar;
-	Interfaces::cvar->Connect(Modules::tier0->GetFactory());
+	if (!Interfaces::cvar->Connect(Modules::tier0->GetFactory()))
+	{
+		spdlog::critical("Failed to connect {}", CVAR_INTERFACE_VERSION);
+		return false;
+	}
 
 	Interfaces::schemaSystem = (CSchemaSystem*)TryFindInterface(*Modules::schemaSystem, SCHEMASYSTEM_INTERFACE_VERSION);
 	if (!Interfaces::schemaSystem)
@@ -172,8 +185,11 @@ bool InitializeSchemas()
 		return false;
 	}
 
-	Interfaces::schemaSystem->Connect(&AppSystemFactory);
-	Interfaces::schemaSystem->Init();
+	if (!Interfaces::schemaSystem->Connect(&AppSystemFactory) || Interfaces::schemaSystem->Init() != INIT_OK)
+	{
+		spdlog::critical("Failed to connect or initialize {}", SCHEMASYSTEM_INTERFACE_VERSION);
+		return false;
+	}
 
 	typedef void* (*InstallSchemaBindings)(const char* interfaceName, void* pSchemaSystem);
 	for (const auto& module : Modules::allModules)
@@ -189,26 +205,29 @@ bool InitializeSchemas()
 		if (module == Modules::allModules.end())
 			continue;
 
-		auto interface = (IAppSystem*)TryFindInterface(*module, appSystem.interfaceVersion.c_str());
-		if (!interface)
+		auto system = (IAppSystem*)TryFindInterface(*module, appSystem.interfaceVersion);
+		if (!system)
 		{
 			spdlog::warn("{} does not expose {}, update its interface version in g_AppSystems in gamedata.h", appSystem.moduleName, appSystem.interfaceVersion);
 			continue;
 		}
 
-		g_factoryMap[appSystem.interfaceVersion] = interface;
-		connectable.emplace_back(appSystem.moduleName, interface);
+		g_factoryMap[appSystem.interfaceVersion] = system;
+		connectable.emplace_back(appSystem.moduleName, system);
 	}
 
 	std::string failed;
-	for (const auto& [name, interface] : connectable)
+	size_t connected = 0;
+	for (const auto& [name, system] : connectable)
 	{
 		spdlog::debug("Connecting {}", name);
-		if (!interface->Connect(&AppSystemFactory))
+		if (system->Connect(&AppSystemFactory))
+			connected++;
+		else
 			failed += fmt::format("{}{}", failed.empty() ? "" : ", ", name);
 	}
 
-	spdlog::info("Connected {} app systems", connectable.size());
+	spdlog::info("Connected {} app systems", connected);
 
 	if (!failed.empty())
 		spdlog::warn("Connect returned false for {}, add the app systems they need to g_AppSystems in gamedata.h (LOGLEVEL=trace lists missing interfaces)", failed);

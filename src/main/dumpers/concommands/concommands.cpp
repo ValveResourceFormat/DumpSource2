@@ -34,12 +34,11 @@
 #include <iterator>
 #include <fstream>
 #include <vector>
-#include <iostream>
 #include <map>
 #include <optional>
 #include <string_view>
-#include <unordered_set>
 #include "gamedata.h"
+#include "output.h"
 #include "modules.h"
 #include <fmt/ranges.h>
 #include <spdlog/spdlog.h>
@@ -49,7 +48,7 @@ namespace Dumpers::ConCommands
 
 using namespace GameData;
 
-std::vector<std::pair<uint64_t, const char*>> g_flagMap{
+static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_LINKED_CONCOMMAND, "linked_concommand" },
 	{ FCVAR_DEVELOPMENTONLY, "developmentonly" },
 	{ FCVAR_GAMEDLL, "gamedll" },
@@ -86,7 +85,7 @@ std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ 1ull << 34, "gameinfo_cannot_override" },
 };
 
-std::vector<std::string> GetFlagNames(uint64_t flags)
+static std::vector<std::string> GetFlagNames(uint64_t flags)
 {
 	std::vector<std::string> names;
 	for (const auto& [value, name] : g_flagMap)
@@ -111,7 +110,7 @@ std::vector<std::string> GetFlagNames(uint64_t flags)
 // Floats are written as the shortest text that reads back as the same value, like 100.1 or 1000000 rather than 1e+06,
 // with at most 6 decimals for values that aren't exact in binary, like 0.015686275
 template <typename T>
-std::string FormatFloat(T value)
+static std::string FormatFloat(T value)
 {
 	char buffer[512];
 	std::string text(buffer, std::to_chars(buffer, std::end(buffer), value, std::chars_format::fixed).ptr);
@@ -198,9 +197,9 @@ static ConVarValue_t FormatValue(EConVarType type, const CVValue_t* value)
 	}
 }
 
-void WriteValueLine(const ConVarValue_t& value, const std::optional<std::string>& minValue, const std::optional<std::string>& maxValue, const std::string& flags, std::ostream& stream)
+static void WriteValueLine(const std::string& value, const std::optional<std::string>& minValue, const std::optional<std::string>& maxValue, const std::string& flags, std::ostream& stream)
 {
-	stream << " " << (std::string_view(value.m_pszType) == "string" ? "\"" + value.m_Text + "\"" : value.m_Text) << " (";
+	stream << " " << value << " (";
 
 	if (minValue)
 		stream << "min: " << *minValue;
@@ -214,7 +213,7 @@ void WriteValueLine(const ConVarValue_t& value, const std::optional<std::string>
 	stream << flags << ")";
 }
 
-void FixNewlineTabbing(std::string& str)
+static void FixNewlineTabbing(std::string& str)
 {
 	auto it = str.begin();
 	while ((it = std::find(it, str.end(), '\n')) != str.end())
@@ -226,14 +225,21 @@ void FixNewlineTabbing(std::string& str)
 	}
 
 	// trim end of string
-	if (str.back() == '\t')
+	if (!str.empty() && str.back() == '\t')
 		str.pop_back();
 
-	if (str.back() == '\n')
+	if (!str.empty() && str.back() == '\n')
 		str.pop_back();
 }
 
-std::string EscapeDescription(std::string str)
+// The engine looks up convars and commands case-insensitively
+static std::string ToLower(std::string str)
+{
+	std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) { return std::tolower(c); });
+	return str;
+}
+
+static std::string EscapeDescription(std::string str)
 {
 	for (auto it = str.begin(); it != str.end(); it++)
 	{
@@ -268,13 +274,15 @@ struct QueuedEntry_t
 struct Queue_t
 {
 	const char* m_pszKind;
+	const char* m_pszListType;
 	const char* m_pszFileName;
 	std::vector<QueuedEntry_t> m_Entries;
 	bool m_bFailed = false;
 };
 
-static Queue_t g_ConVarQueue{ "convar", "convars.txt" };
-static Queue_t g_ConCommandQueue{ "concommand", "commands.txt" };
+static Queue_t g_ConVarQueue{ "convar", "ConVarRegList", "convars.txt" };
+static Queue_t g_ConCommandQueue{ "concommand", "ConCommandRegList", "commands.txt" };
+static std::set<std::string> g_CollectedModules;
 
 static QueuedEntry_t CopyQueued(const char* module, const ConVarRegList::Entry_t& queued)
 {
@@ -364,7 +372,7 @@ static int CollectQueue(CModule& module, const byte (&signature)[N], Queue_t& qu
 	{
 		if (list->m_nSize > std::size(list->m_Entries))
 		{
-			spdlog::critical("{} list in {} has {} entries, the layout in gamedata.h needs updating", queue.m_pszKind, module.m_pszModule, list->m_nSize);
+			spdlog::critical("{} list in {} has {} entries, {} in the SDK needs updating", queue.m_pszKind, module.m_pszModule, list->m_nSize, queue.m_pszListType);
 			queue.m_bFailed = true;
 			return count;
 		}
@@ -373,7 +381,7 @@ static int CollectQueue(CModule& module, const byte (&signature)[N], Queue_t& qu
 		{
 			if (auto invalid = ValidateQueued(list->m_Entries[i]))
 			{
-				spdlog::critical("{} list entry {} in {} has an invalid {}, the layout in gamedata.h needs updating", queue.m_pszKind, count, module.m_pszModule, invalid);
+				spdlog::critical("{} list entry {} in {} has an invalid {}, {} in the SDK needs updating", queue.m_pszKind, count, module.m_pszModule, invalid, queue.m_pszListType);
 				queue.m_bFailed = true;
 				return count;
 			}
@@ -387,6 +395,7 @@ static int CollectQueue(CModule& module, const byte (&signature)[N], Queue_t& qu
 
 void CollectQueues(CModule& module)
 {
+	g_CollectedModules.insert(module.m_pszModule);
 	auto cvars = CollectQueue<ConVarRegList>(module, g_ConVarQueueSignature, g_ConVarQueue);
 	auto cmds = CollectQueue<ConCommandRegList>(module, g_ConCommandQueueSignature, g_ConCommandQueue);
 
@@ -403,9 +412,7 @@ static void WriteHelp(const char* name, const char* help, std::ofstream& output)
 		FixNewlineTabbing(helpString);
 	}
 
-	output << "\n\t" << helpString;
-	output << "\n"
-		   << std::endl;
+	output << "\n\t" << helpString << "\n\n";
 
 	Globals::stringsIgnoreStream << name << "\n";
 }
@@ -485,9 +492,10 @@ static bool LoadWorkshopWhitelist(std::set<std::string>& names)
 	for (auto quote = text.find('"', start); quote < end; quote = text.find('"', quote + 1))
 	{
 		const auto close = text.find('"', quote + 1);
-		auto name = text.substr(quote + 1, close - quote - 1);
-		std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return std::tolower(c); });
-		names.insert(name);
+		if (close == std::string::npos)
+			break;
+
+		names.insert(ToLower(text.substr(quote + 1, close - quote - 1)));
 		quote = close;
 	}
 
@@ -500,15 +508,14 @@ static bool LoadWorkshopWhitelist(std::set<std::string>& names)
 	return true;
 }
 
-static void WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& whitelist)
+static bool WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& whitelist)
 {
 	std::map<std::string, std::vector<QueuedEntry_t*>> byName;
 	for (auto& entry : queue.m_Entries)
 		byName[entry.m_Name].push_back(&entry);
 
-	spdlog::info("Wrote {} {}s to {}", byName.size(), queue.m_pszKind, queue.m_pszFileName);
-
-	std::ofstream output(Globals::outputPath / queue.m_pszFileName);
+	const auto path = Globals::outputPath / queue.m_pszFileName;
+	std::ofstream output(path);
 	auto items = nlohmann::json::array();
 
 	for (const auto& [name, entries] : byName)
@@ -523,17 +530,14 @@ static void WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 		auto flagNames = GetFlagNames(entry.m_nFlags);
 
 		// Found names are removed, so the ones left over can be reported
-		auto lowerName = name;
-		std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), [](unsigned char c) { return std::tolower(c); });
-		if (whitelist.erase(lowerName))
+		if (whitelist.erase(ToLower(name)))
 			flagNames.push_back("workshop_whitelisted");
 
 		auto flags = fmt::format("{}", fmt::join(flagNames, " "));
 
 		if (isConVar)
 		{
-			// cl_color has a random default value on each start.
-			const bool hasDefault = entry.m_Default && name != "cl_color";
+			const bool hasDefault = entry.m_Default && !g_ConVarsWithRandomDefaults.contains(name);
 
 			// convars.txt writes the type's empty value when there is no default
 			alignas(CVValue_t) static const uint8 empty[sizeof(CVValue_t)] = {};
@@ -548,7 +552,7 @@ static void WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 				maxValue = entry.m_Max;
 			}
 
-			WriteValueLine(value, minValue, maxValue, flags, output);
+			WriteValueLine(entry.m_eType == EConVarType_String ? "\"" + value.m_Text + "\"" : value.m_Text, minValue, maxValue, flags, output);
 
 			item["type"] = value.m_pszType;
 			if (hasDefault)
@@ -577,27 +581,48 @@ static void WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 	}
 
 	Globals::schemasJson[isConVar ? "convars" : "commands"] = std::move(items);
+
+	if (!CloseOutput(output, path))
+		return false;
+
+	spdlog::info("Wrote {} {}s to {}", byName.size(), queue.m_pszKind, queue.m_pszFileName);
+	return true;
 }
 
 // Returns false if either could not be dumped, which is then not written to keep the previous dump
 bool Dump()
 {
 	std::set<std::string> whitelist;
-	const bool whitelistLoaded = LoadWorkshopWhitelist(whitelist);
+	bool success = LoadWorkshopWhitelist(whitelist);
+
+	// Their convars and commands would silently be missing
+	for (const auto& name : g_RequiredQueueModules)
+	{
+		if (!g_CollectedModules.contains(name))
+		{
+			spdlog::critical("Required module {} did not load", name);
+			g_ConVarQueue.m_bFailed = g_ConCommandQueue.m_bFailed = true;
+		}
+	}
 
 	for (auto queue : { &g_ConVarQueue, &g_ConCommandQueue })
 	{
 		if (queue->m_bFailed)
-			spdlog::critical("Not writing {} because the {} queue signature failed, see above", queue->m_pszFileName, queue->m_pszKind);
-		else
-			WriteQueued(*queue, queue == &g_ConVarQueue, whitelist);
+		{
+			spdlog::critical("Not writing {} because reading the {} queues failed, see above", queue->m_pszFileName, queue->m_pszKind);
+			success = false;
+		}
+		else if (!WriteQueued(*queue, queue == &g_ConVarQueue, whitelist))
+		{
+			success = false;
+		}
 	}
 
 	// Like button commands, which are registered at runtime, or names the game no longer has
 	if (!whitelist.empty())
 		spdlog::info("{} workshop whitelisted names are not convars or commands: {}", whitelist.size(), fmt::join(whitelist, ", "));
 
-	return whitelistLoaded && !g_ConVarQueue.m_bFailed && !g_ConCommandQueue.m_bFailed;
+	return success;
 }
 
 } // namespace Dumpers::ConCommands

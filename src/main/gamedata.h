@@ -24,6 +24,7 @@
 #include <icvar.h>
 #include <interfaces/interfaces.h>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -41,7 +42,7 @@ struct AppSystemInfo_t
 {
 	bool gameBin;
 	const char* moduleName;
-	std::string interfaceVersion;
+	const char* interfaceVersion;
 };
 
 // App systems that get connected (but not initialized) to fill in module interface globals used by KV3 defaults.
@@ -131,6 +132,59 @@ inline constexpr const char* g_SaveKV3TextToStringSymbol = "_Z20SaveKV3Text_ToSt
 #endif
 
 //-----------------------------------------------------------------------------
+// Schema class defaults (MGetKV3ClassDefaults)
+//-----------------------------------------------------------------------------
+
+// Their constructors crash, they need a running game (owning entity, game systems)
+inline const std::unordered_set<std::string> g_ClassesWithBrokenDefaults = {
+	"C_fogplayerparams_t",
+	"fogplayerparams_t",
+	"CBodyComponentBaseAnimating",
+	"CBodyComponentBaseAnimGraph",
+	"CBodyComponentPoint",
+	"CBodyComponentSkeletonInstance",
+	"CCitadelPlayerPawn_GraphController2",
+	"CGameSceneNode",
+	"CSkeletonInstance",
+};
+
+// Keys that constructors fill with random values or leave uninitialized, so their values are zeroed at any depth.
+// These are in, or embedded in, many classes, so they are zeroed in all of them.
+inline const std::unordered_set<std::string> g_HiddenDefaultKeys = {
+	"m_id",
+	"m_ID",
+	"m_influenceOffsets", // CAnimAttachment
+	"m_nRandomSeed",
+};
+
+// The same, but only zeroed in these classes. Classes that embed another one with the key are listed too.
+inline const std::unordered_map<std::string, std::unordered_set<std::string>> g_HiddenClassDefaultKeys = {
+	{ "CAnimGraphDoc_ChoiceNode", { "m_seed" } },
+	{ "CAnimGraphDoc_ComponentState", { "m_stateID" } },
+	{ "CAnimGraphDoc_GroupNode", { "m_nodes" } }, // Input and output nodes in random order
+	{ "CAnimGraphDoc_NodeState", { "m_stateID" } },
+	{ "CAnimGraphDoc_State", { "m_stateID" } },
+	{ "CBlockSelectionMetricEvaluator", { "m_means", "m_standardDeviations" } },
+	{ "CNmBlendSpace1D::Point_t", { "m_pinID" } },
+	{ "CNmGraphDocBlend1DNode", { "m_pinID" } },
+	{ "CNmGraphDocEntryOverrideNode", { "m_stateID" } },
+	{ "CNmGraphDocFlowGraph::Connection_t", { "m_outputPinID" } },
+	{ "CNmGraphDocGlobalTransitionNode", { "m_stateID" } },
+	{ "CNmGraphDocStateMachineGraph", { "m_entryStateID" } },
+	{ "CNmGraphDocStateMachineNode", { "m_stateID", "m_entryStateID", "m_cloneStateVersion" } },
+	{ "CNmGraphDocStateNode", { "m_cloneStateVersion" } },
+	{ "CStateUpdateData", { "m_stateID" } },
+	{ "CTestPulseIO::EntityHandleIntArgs_t", { "valueB" } },
+	{ "FourCovMatrices3", { "m_flXY" } },
+	{ "HitReactFixedSettings_t", { "m_flWhipSpringStrength" } },
+	{ "RTProxyBLAS_t", { "m_vMaxBounds" } },
+	{ "VMixPointerFixupEntry_t", { "m_nIndex" } },
+	{ "dynpitchvol_base_t", { "pitchfrac", "vol" } },
+	{ "dynpitchvol_t", { "pitchfrac", "vol" } },
+	{ "vphysics_save_ragdoll_control_t", { "m_vLinearVelocityAccumulator" } },
+};
+
+//-----------------------------------------------------------------------------
 // Interfaces
 //-----------------------------------------------------------------------------
 
@@ -161,6 +215,9 @@ inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\x
 
 // Modules that always declare both, not finding their queues means the signatures are outdated
 inline const std::unordered_set<std::string> g_RequiredQueueModules = { "tier0", "engine2", "client", "server" };
+
+// Convars with a random default value on each start
+inline const std::unordered_set<std::string> g_ConVarsWithRandomDefaults = { "cl_color" };
 
 // Convars and commands that workshop maps can use, in the game directory as GameTracking extracts it from pak01_dir.vpk.
 // Only CS2 has it. It's KV3 text with the names in a whitelist_cvars array.

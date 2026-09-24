@@ -19,8 +19,6 @@
 
 #include "json_exporter.h"
 #include "globalvariables.h"
-#include <filesystem>
-#include <fstream>
 #include <optional>
 #include <spdlog/spdlog.h>
 #include <nlohmann/json.hpp>
@@ -30,7 +28,7 @@ using json = nlohmann::json;
 namespace Dumpers::Schemas::JsonExporter
 {
 
-json SerializeMetadataArray(const std::vector<IntermediateMetadata>& metadataVector)
+static json SerializeMetadataArray(const std::vector<IntermediateMetadata>& metadataVector)
 {
 	json arr = json::array();
 	for (const auto& metadata : metadataVector)
@@ -47,7 +45,7 @@ json SerializeMetadataArray(const std::vector<IntermediateMetadata>& metadataVec
 	return arr;
 }
 
-json SerializeType(CSchemaType* type)
+static json SerializeType(CSchemaType* type)
 {
 	if (!type)
 		return nullptr;
@@ -103,6 +101,18 @@ json SerializeType(CSchemaType* type)
 				j["inner"] = SerializeType(tt->m_pTemplateType);
 				j["inner2"] = SerializeType(tt->m_pTemplateType2);
 			}
+			else if (type->m_eAtomicCategory == SCHEMA_ATOMIC_I)
+			{
+				// Like the size of CBitVec<N>
+				j["count"] = static_cast<CSchemaType_Atomic_I*>(type)->m_nInteger;
+			}
+
+			// Like the inline element count of CUtlVectorFixedGrowable<T, N>
+			if (type->m_eAtomicCategory == SCHEMA_ATOMIC_COLLECTION_OF_T)
+			{
+				if (auto count = static_cast<CSchemaType_Atomic_CollectionOfT*>(type)->m_nFixedBufferCount)
+					j["count"] = count;
+			}
 			break;
 		}
 		case SCHEMA_TYPE_DECLARED_CLASS:
@@ -136,6 +146,7 @@ json SerializeType(CSchemaType* type)
 			j["count"] = static_cast<CSchemaType_Bitfield*>(type)->m_nBitfieldCount;
 			break;
 		default:
+			spdlog::warn("Type '{}' has unknown category {}, written as builtin", type->m_sTypeName.String(), (int)type->m_eTypeCategory);
 			j["category"] = "builtin";
 			j["name"] = type->m_sTypeName.String();
 			break;
@@ -144,12 +155,10 @@ json SerializeType(CSchemaType* type)
 	return j;
 }
 
-void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, json& classesArray)
+static void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, json& classesArray)
 {
 	for (const auto& intermediateClass : classes)
 	{
-		spdlog::trace("Dumping class for json: '{}'", intermediateClass.name);
-
 		json classObj;
 		classObj["name"] = intermediateClass.name;
 		classObj["module"] = intermediateClass.module;
@@ -174,7 +183,6 @@ void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, json& clas
 		json fields = json::array();
 		for (const auto& field : intermediateClass.fields)
 		{
-			spdlog::trace("Dumping field: '{}' for class: '{}'", field.name, intermediateClass.name);
 			json fieldObj;
 			fieldObj["name"] = field.name;
 			fieldObj["offset"] = field.offset;
@@ -184,7 +192,7 @@ void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, json& clas
 			if (fieldMetadataArr.size())
 				fieldObj["metadata"] = std::move(fieldMetadataArr);
 
-			fields.push_back(fieldObj);
+			fields.push_back(std::move(fieldObj));
 		}
 
 		if (fields.size())
@@ -194,7 +202,7 @@ void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, json& clas
 	}
 }
 
-void DumpEnums(const std::vector<IntermediateSchemaEnum>& enums, json& enumsArray)
+static void DumpEnums(const std::vector<IntermediateSchemaEnum>& enums, json& enumsArray)
 {
 	for (const auto& intermediateEnum : enums)
 	{

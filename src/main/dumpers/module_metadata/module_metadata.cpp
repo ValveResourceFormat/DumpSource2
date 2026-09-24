@@ -19,114 +19,166 @@
 
 #include "module_metadata.h"
 #include "gamedata.h"
-#include <spdlog/spdlog.h>
-#include "modules.h"
-#include "utils/module.h"
-#include "utils/common.h"
 #include "globalvariables.h"
+#include "modules.h"
+#include "output.h"
+#include "utils/common.h"
+#include "utils/module.h"
 #include "keyvalues3.h"
+#include <algorithm>
+#include <string_view>
 #include <unordered_set>
+#include <spdlog/spdlog.h>
 
 namespace Dumpers::ModuleMetadata
 {
 
-// Returns the module's metadata KV3, or null if it has none
-static void* ExtractModuleMetadata(const CModule& module)
+// Reads the module's metadata KV3 into kv3, which is null if it has none. Returns false if the module can't be asked for it.
+static bool ExtractModuleMetadata(const CModule& module, void*& kv3)
 {
 	typedef void* (*ExtractModuleMetadataFn)(SimpleCUtlString& str);
-	auto extractModuleMetadataFn = module.GetSymbol<ExtractModuleMetadataFn>("ExtractModuleMetadata");
+	auto extractModuleMetadataFn = (ExtractModuleMetadataFn)dlsym(module.m_hModule, "ExtractModuleMetadata");
+
+	if (!extractModuleMetadataFn)
+	{
+		spdlog::critical("{} does not export ExtractModuleMetadata", module.m_pszModule);
+		return false;
+	}
 
 	SimpleCUtlString additional_info;
-	auto kv3 = extractModuleMetadataFn(additional_info);
+	kv3 = extractModuleMetadataFn(additional_info);
 
 	// Modules without metadata return null on Linux (and an empty kv3 on Windows)
 	if (!kv3)
 	{
 		if (additional_info.Get())
 			spdlog::debug("{} has no metadata: {}", module.m_pszModule, additional_info.Get());
-
-		return nullptr;
+	}
+	else if (additional_info.Get())
+	{
+		spdlog::warn("{} has additional_info {}", module.m_pszModule, additional_info.Get());
 	}
 
-	if (additional_info.Get())
-		spdlog::warn("{} has additional_info {}", module.m_pszModule, additional_info.Get());
-
-	return kv3;
+	return true;
 }
 
-void GetModuleMetadata(const CModule& module, SimpleCUtlString& err, SimpleCUtlString& buf)
+// SaveKV3AsJSON writes NaN and infinity as bare words, which JSON has no value for, so they are quoted into strings
+static std::string QuoteNonFiniteFloats(std::string_view text)
 {
-	spdlog::trace("Dumping metadata for {}", module.m_pszModule);
+	// In this order so -nan is not matched as nan
+	constexpr std::string_view nonFiniteFloats[] = { "-nan", "nan", "-inf", "inf" };
 
-	auto kv3 = ExtractModuleMetadata(module);
-	if (!kv3)
-		return;
+	std::string result;
+	bool inString = false;
 
-	typedef int (*SaveKV3Text_ToString)(KV3ID_t const&, void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
-	static auto saveKV3Text_ToStringFn = Modules::tier0->GetSymbol<SaveKV3Text_ToString>(GameData::g_SaveKV3TextToStringSymbol);
+	for (size_t i = 0; i < text.size(); i++)
+	{
+		if (inString)
+		{
+			if (text[i] == '\\')
+				result += text[i++];
+			else if (text[i] == '"')
+				inString = false;
+		}
+		else if (text[i] == '"')
+		{
+			inString = true;
+		}
+		else
+		{
+			// Outside strings, only numbers and true/false/null are bare, none of which contain these
+			auto nonFinite = std::find_if(std::begin(nonFiniteFloats), std::end(nonFiniteFloats), [&](std::string_view word) { return text.substr(i, word.size()) == word; });
+			if (nonFinite != std::end(nonFiniteFloats))
+			{
+				result += '"';
+				result += *nonFinite;
+				result += '"';
+				i += nonFinite->size() - 1;
+				continue;
+			}
+		}
 
-	saveKV3Text_ToStringFn(g_KV3Encoding_Text, kv3, err, buf);
+		result += text[i];
+	}
+
+	return result;
+}
+
+nlohmann::ordered_json KV3ToJSON(void* kv3)
+{
+	typedef bool (*SaveKV3AsJSONFn)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
+	static auto saveKV3AsJSON = Modules::tier0->GetSymbol<SaveKV3AsJSONFn>(GameData::g_SaveKV3AsJSONSymbol);
+
+	SimpleCUtlString err, buf;
+	if (!saveKV3AsJSON(kv3, err, buf) || !buf.Get())
+		return nlohmann::ordered_json::value_t::discarded;
+
+	return nlohmann::ordered_json::parse(QuoteNonFiniteFloats(buf.Get()), nullptr, false);
 }
 
 nlohmann::ordered_json GetJSON(const CModule& module)
 {
-	auto kv3 = ExtractModuleMetadata(module);
+	void* kv3;
+	if (!ExtractModuleMetadata(module, kv3))
+		return nlohmann::ordered_json::value_t::discarded;
+
 	if (!kv3)
 		return nullptr;
 
-	typedef int (*SaveKV3AsJSON)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
-	static auto saveKV3AsJSONFn = Modules::tier0->GetSymbol<SaveKV3AsJSON>(GameData::g_SaveKV3AsJSONSymbol);
+	auto json = KV3ToJSON(kv3);
+	if (json.is_discarded())
+		spdlog::critical("Failed to convert {} metadata to JSON", module.m_pszModule);
 
-	SimpleCUtlString err, buf;
-	if (!saveKV3AsJSONFn(kv3, err, buf) || !buf.Get())
-	{
-		spdlog::error("Failed to convert {} metadata to JSON: {}", module.m_pszModule, err.Get() ? err.Get() : "");
-		return nlohmann::ordered_json::value_t::discarded;
-	}
-
-	return nlohmann::ordered_json::parse(buf.Get(), nullptr, false);
+	return json;
 }
 
-void Dump()
+bool Dump()
 {
+	typedef bool (*SaveKV3Text_ToStringFn)(KV3ID_t const&, void* kv3, SimpleCUtlString& err, SimpleCUtlString& str, uint flags);
+	static auto saveKV3Text_ToString = Modules::tier0->GetSymbol<SaveKV3Text_ToStringFn>(GameData::g_SaveKV3TextToStringSymbol);
+
 	std::unordered_set<std::string> foundModules;
 	const auto outputPath = Globals::outputPath / "module_metadata";
 
 	for (const auto& module : Modules::allModules)
 	{
+		spdlog::trace("Dumping metadata for {}", module.m_pszModule);
+
+		void* kv3;
+		if (!ExtractModuleMetadata(module, kv3))
+			return false;
+
+		if (!kv3)
+			continue;
+
 		SimpleCUtlString err, buf;
-		GetModuleMetadata(module, err, buf);
-
-		if (buf.Get())
+		if (!saveKV3Text_ToString(g_KV3Encoding_Text, kv3, err, buf, KV3_SAVE_TEXT_NONE) || !buf.Get())
 		{
-			auto sanitizedModuleName = std::string(module.m_pszModule);
-			std::replace(sanitizedModuleName.begin(), sanitizedModuleName.end(), '/', '_');
-			foundModules.insert(sanitizedModuleName);
-
-			if (!std::filesystem::is_directory(outputPath) && !std::filesystem::create_directory(outputPath))
-			{
-				spdlog::error("Failed to create {}", outputPath.generic_string());
-				return;
-			}
-
-			std::ofstream output((outputPath / sanitizedModuleName).replace_extension(".kv3"));
-			output << buf.Get() << std::endl;
+			spdlog::critical("Failed to convert {} metadata to KV3 text: {}", module.m_pszModule, err.Get() ? err.Get() : "");
+			return false;
 		}
+
+		auto sanitizedModuleName = std::string(module.m_pszModule);
+		std::replace(sanitizedModuleName.begin(), sanitizedModuleName.end(), '/', '_');
+		foundModules.insert(sanitizedModuleName);
+
+		std::filesystem::create_directories(outputPath);
+
+		const auto path = (outputPath / sanitizedModuleName).replace_extension(".kv3");
+		std::ofstream output(path);
+		output << buf.Get() << "\n";
+
+		if (!CloseOutput(output, path))
+			return false;
 	}
 
 	spdlog::info("Wrote module metadata for {} modules", foundModules.size());
 
 	if (!std::filesystem::is_directory(outputPath))
-		return;
+		return true;
 
-	for (const auto& typeScopePath : std::filesystem::directory_iterator(outputPath))
-	{
-		if (foundModules.find(typeScopePath.path().stem().string()) == foundModules.end())
-		{
-			spdlog::info("Removing orphan metadata file {}", typeScopePath.path().generic_string());
-			std::filesystem::remove(typeScopePath.path());
-		}
-	}
+	RemoveOrphanFiles(outputPath, foundModules, "metadata");
+	return true;
 }
 
 } // namespace Dumpers::ModuleMetadata

@@ -21,5 +21,6 @@
 
 namespace Dumpers::Schemas::FilesystemExporter
 {
-void Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<IntermediateSchemaClass>& classes);
+// Returns false if a file could not be written
+bool Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<IntermediateSchemaClass>& classes);
 } // namespace Dumpers::Schemas::FilesystemExporter

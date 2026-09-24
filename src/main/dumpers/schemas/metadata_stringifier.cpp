@@ -20,24 +20,20 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "metadata_stringifier.h"
+#include "metadatalist.h"
+#include "dumpers/module_metadata/module_metadata.h"
 #include "gamedata.h"
 #include "globalvariables.h"
-#include "interfaces.h"
+#include "modules.h"
 #include <algorithm>
-#include <filesystem>
 #include <map>
-#include <unordered_map>
-#include <unordered_set>
-#include "metadatalist.h"
 #include <optional>
-#include <fmt/format.h>
-#include "metadata_stringifier.h"
-#include <modules.h>
-#include <vector>
 #include <string_view>
+#include <unordered_set>
+#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
-#include "utils/common.h"
 
 #ifndef WIN32
 #include <sys/mman.h>
@@ -46,55 +42,6 @@
 
 namespace Dumpers::Schemas
 {
-
-// Their constructors crash, they need a running game (owning entity, game systems)
-std::unordered_set<std::string> g_classWithBrokenDefaults = {
-	"C_fogplayerparams_t",
-	"fogplayerparams_t",
-	"CBodyComponentBaseAnimating",
-	"CBodyComponentBaseAnimGraph",
-	"CBodyComponentPoint",
-	"CBodyComponentSkeletonInstance",
-	"CCitadelPlayerPawn_GraphController2",
-	"CGameSceneNode",
-	"CSkeletonInstance",
-};
-
-// Keys that constructors fill with random values or leave uninitialized, so their values are zeroed at any depth.
-// These are in, or embedded in, many classes, so they are zeroed in all of them.
-std::unordered_set<std::string> g_hiddenDefaultKeys = {
-	"m_id",
-	"m_ID",
-	"m_influenceOffsets", // CAnimAttachment
-	"m_nRandomSeed",
-};
-
-// The same, but only zeroed in these classes. Classes that embed another one with the key are listed too.
-std::unordered_map<std::string, std::unordered_set<std::string>> g_hiddenClassDefaultKeys = {
-	{ "CAnimGraphDoc_ChoiceNode", { "m_seed" } },
-	{ "CAnimGraphDoc_ComponentState", { "m_stateID" } },
-	{ "CAnimGraphDoc_GroupNode", { "m_nodes" } }, // Input and output nodes in random order
-	{ "CAnimGraphDoc_NodeState", { "m_stateID" } },
-	{ "CAnimGraphDoc_State", { "m_stateID" } },
-	{ "CBlockSelectionMetricEvaluator", { "m_means", "m_standardDeviations" } },
-	{ "CNmBlendSpace1D::Point_t", { "m_pinID" } },
-	{ "CNmGraphDocBlend1DNode", { "m_pinID" } },
-	{ "CNmGraphDocEntryOverrideNode", { "m_stateID" } },
-	{ "CNmGraphDocFlowGraph::Connection_t", { "m_outputPinID" } },
-	{ "CNmGraphDocGlobalTransitionNode", { "m_stateID" } },
-	{ "CNmGraphDocStateMachineGraph", { "m_entryStateID" } },
-	{ "CNmGraphDocStateMachineNode", { "m_stateID", "m_entryStateID", "m_cloneStateVersion" } },
-	{ "CNmGraphDocStateNode", { "m_cloneStateVersion" } },
-	{ "CStateUpdateData", { "m_stateID" } },
-	{ "CTestPulseIO::EntityHandleIntArgs_t", { "valueB" } },
-	{ "FourCovMatrices3", { "m_flXY" } },
-	{ "HitReactFixedSettings_t", { "m_flWhipSpringStrength" } },
-	{ "RTProxyBLAS_t", { "m_vMaxBounds" } },
-	{ "VMixPointerFixupEntry_t", { "m_nIndex" } },
-	{ "dynpitchvol_base_t", { "pitchfrac", "vol" } },
-	{ "dynpitchvol_t", { "pitchfrac", "vol" } },
-	{ "vphysics_save_ragdoll_control_t", { "m_vLinearVelocityAccumulator" } },
-};
 
 bool g_bInvalidKV3Defaults = false;
 
@@ -122,7 +69,14 @@ static void* CallKV3Defaults(GetKV3DefaultsFn fn)
 	static void* mainFiber = ConvertThreadToFiber(nullptr);
 
 	KV3DefaultsCall call{ fn, nullptr, mainFiber };
-	auto fiber = CreateFiber(0x100000, KV3DefaultsFiber, &call);
+	auto fiber = mainFiber ? CreateFiber(0x100000, KV3DefaultsFiber, &call) : nullptr;
+	if (!fiber)
+	{
+		spdlog::critical("Failed to create a fiber for KV3 defaults, error {}", GetLastError());
+		g_bInvalidKV3Defaults = true;
+		return nullptr;
+	}
+
 	SwitchToFiber(fiber);
 	DeleteFiber(fiber);
 
@@ -141,11 +95,15 @@ static void* CallKV3Defaults(GetKV3DefaultsFn fn)
 {
 	constexpr size_t stackSize = 0x100000;
 	auto stack = mmap(nullptr, stackSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
-	if (stack == MAP_FAILED)
-		return fn();
-
 	ucontext_t mainContext, context;
-	getcontext(&context);
+
+	if (stack == MAP_FAILED || getcontext(&context) != 0)
+	{
+		spdlog::critical("Failed to create a stack for KV3 defaults: {}", strerror(errno));
+		g_bInvalidKV3Defaults = true;
+		return nullptr;
+	}
+
 	context.uc_stack.ss_sp = stack;
 	context.uc_stack.ss_size = stackSize;
 	context.uc_link = &mainContext;
@@ -159,53 +117,13 @@ static void* CallKV3Defaults(GetKV3DefaultsFn fn)
 }
 #endif
 
-// SaveKV3AsJSON writes NaN and infinity as bare words, which JSON has no value for, so they are quoted into strings
-static std::string QuoteNonFiniteFloats(std::string_view text)
-{
-	// In this order so -nan is not matched as nan
-	constexpr std::string_view nonFiniteFloats[] = { "-nan", "nan", "-inf", "inf" };
-
-	std::string result;
-	bool inString = false;
-
-	for (size_t i = 0; i < text.size(); i++)
-	{
-		if (inString)
-		{
-			if (text[i] == '\\')
-				result += text[i++];
-			else if (text[i] == '"')
-				inString = false;
-		}
-		else if (text[i] == '"')
-		{
-			inString = true;
-		}
-		else
-		{
-			// Outside strings, only numbers and true/false/null are bare, none of which contain these
-			auto nonFinite = std::find_if(std::begin(nonFiniteFloats), std::end(nonFiniteFloats), [&](std::string_view word) { return text.substr(i, word.size()) == word; });
-			if (nonFinite != std::end(nonFiniteFloats))
-			{
-				result += fmt::format("\"{}\"", *nonFinite);
-				i += nonFinite->size() - 1;
-				continue;
-			}
-		}
-
-		result += text[i];
-	}
-
-	return result;
-}
-
 // Resets hidden values to zero, keeping their type and shape
 static void ZeroHiddenDefaults(nlohmann::ordered_json& value, const std::unordered_set<std::string>& classKeys, bool hidden = false)
 {
 	if (value.is_object())
 	{
 		for (auto it = value.begin(); it != value.end(); ++it)
-			ZeroHiddenDefaults(it.value(), classKeys, hidden || g_hiddenDefaultKeys.contains(it.key()) || classKeys.contains(it.key()));
+			ZeroHiddenDefaults(it.value(), classKeys, hidden || GameData::g_HiddenDefaultKeys.contains(it.key()) || classKeys.contains(it.key()));
 	}
 	else if (value.is_array())
 	{
@@ -253,32 +171,25 @@ static void WriteDefaults(const nlohmann::ordered_json& value, const std::string
 
 static std::optional<std::string> GetKV3Defaults(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName, std::optional<nlohmann::json>& jsonValue)
 {
-	typedef int (*SaveKV3AsJsonFn)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
-
-	if (!(*(void**)entry.m_pData) || g_classWithBrokenDefaults.contains(metadataTargetName))
+	if (!(*(void**)entry.m_pData) || GameData::g_ClassesWithBrokenDefaults.contains(metadataTargetName))
 		return "Could not parse KV3 Defaults";
 
-	static auto SaveKV3AsJson = Modules::tier0->GetSymbol<SaveKV3AsJsonFn>(GameData::g_SaveKV3AsJSONSymbol);
-
+	// Abstract classes have no defaults
 	auto value = CallKV3Defaults(reinterpret_cast<GetKV3DefaultsFn>(*(void**)entry.m_pData));
-	SimpleCUtlString err;
-	SimpleCUtlString buf;
-
-	if (!value || !SaveKV3AsJson(*(void**)value, err, buf))
+	if (!value)
 		return "Could not parse KV3 Defaults";
 
-	auto defaults = nlohmann::ordered_json::parse(QuoteNonFiniteFloats(buf.Get()), nullptr, false);
-
+	auto defaults = ModuleMetadata::KV3ToJSON(*(void**)value);
 	if (defaults.is_discarded())
 	{
-		spdlog::critical("KV3 defaults of {} are not valid JSON, the SaveKV3AsJSON output format changed", metadataTargetName);
+		spdlog::critical("KV3 defaults of {} could not be converted to JSON", metadataTargetName);
 		g_bInvalidKV3Defaults = true;
 		return {};
 	}
 
 	static const std::unordered_set<std::string> noClassKeys;
-	auto classKeys = g_hiddenClassDefaultKeys.find(metadataTargetName);
-	const auto& hiddenClassKeys = classKeys != g_hiddenClassDefaultKeys.end() ? classKeys->second : noClassKeys;
+	auto classKeys = GameData::g_HiddenClassDefaultKeys.find(metadataTargetName);
+	const auto& hiddenClassKeys = classKeys != GameData::g_HiddenClassDefaultKeys.end() ? classKeys->second : noClassKeys;
 
 	ZeroHiddenDefaults(defaults, hiddenClassKeys);
 	jsonValue = defaults;
@@ -318,6 +229,18 @@ static std::string DescribeUnknownMetadata(const void* data)
 	}
 
 	return description;
+}
+
+// Joins the names that are set, some are -1 instead of null since the Deadlock 14/09/24 update
+static std::string JoinNames(const char* first, std::string_view separator, const char* second)
+{
+	auto isSet = [](const char* name) { return name != nullptr && name != reinterpret_cast<const char*>(-1); };
+
+	if (isSet(first) && isSet(second))
+		return fmt::format("{}{}{}", first, separator, second);
+
+	return isSet(first) ? first : isSet(second) ? second
+	                                            : "";
 }
 
 static bool HasMetadataValue(const SchemaMetadataEntryData_t& entry)
@@ -386,44 +309,18 @@ static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData
 		}
 		case MetadataValueType::VARNAME:
 		{
+			// Written as "type name"
 			auto value = static_cast<CSchemaVarName*>(entry.m_pData);
-
-			const auto check_ptr = [](const char* ptr) -> bool {
-				// Authored: source2gen
-				// @note: hotfix for the deadlock 14/09/24 update,
-				// where they filled some ptrs with -1 instead of nullptr
-				return ptr != nullptr && ptr != reinterpret_cast<const char*>(-1);
-			};
-
-			std::stringstream stringStream;
-			auto hasType = check_ptr(value->m_pszType);
-			auto hasName = check_ptr(value->m_pszName);
-
-			stringStream << "\"";
-
-			if (hasType)
-				stringStream << value->m_pszType;
-
-			if (hasName)
-			{
-				if (hasType)
-					stringStream << " ";
-				stringStream << value->m_pszName;
-			}
-
-			stringStream << "\"";
-
-			return stringStream.str();
+			return fmt::format("\"{}\"", JoinNames(value->m_pszType, " ", value->m_pszName));
+		}
+		case MetadataValueType::NETWORK_OVERRIDE:
+		{
+			// Written as "Class::field", or "field" when it's in the class itself
+			auto value = static_cast<CSchemaNetworkOverride*>(entry.m_pData);
+			return fmt::format("\"{}\"", JoinNames(value->m_pszClassName, "::", value->m_pszFieldName));
 		}
 		case MetadataValueType::KV3DEFAULTS:
 			return GetKV3Defaults(entry, metadataTargetName, jsonValue);
-		case MetadataValueType::DEBUGGER_BREAKPOINT:
-		{
-#ifdef WIN32
-			__debugbreak();
-#endif
-			return "DEBUGGING";
-		}
 	}
 
 	return {};

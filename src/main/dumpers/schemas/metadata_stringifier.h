@@ -31,6 +31,12 @@ struct CSchemaVarName
 	const char* m_pszType;
 };
 
+struct CSchemaNetworkOverride
+{
+	const char* m_pszClassName;
+	const char* m_pszFieldName;
+};
+
 struct CSchemaSendProxyRecipientsFilter
 {
 	void* unk;

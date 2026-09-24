@@ -25,9 +25,13 @@ class CModule;
 namespace Dumpers::ModuleMetadata
 {
 
-void Dump();
+// Returns false if any module's metadata could not be read or written
+bool Dump();
 
 // The module's metadata converted to JSON, null if the module has none, discarded if it could not be converted
 nlohmann::ordered_json GetJSON(const CModule& module);
+
+// Converts KV3 to JSON with tier0's SaveKV3AsJSON, discarded if it fails
+nlohmann::ordered_json KV3ToJSON(void* kv3);
 
 } // namespace Dumpers::ModuleMetadata

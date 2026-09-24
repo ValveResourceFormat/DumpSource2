@@ -20,6 +20,7 @@
 #include "logging_channels.h"
 #include "globalvariables.h"
 #include "modules.h"
+#include "output.h"
 #include <tier0/logging.h>
 #include <cstring>
 #include <fstream>
@@ -84,7 +85,7 @@ bool Dump()
 
 		// tier0 can change the layout while the exports stay the same, so compare the fields with what they return.
 		// Tags are allocated from a static array in tier0.
-		bool valid = channel->m_ID == id && channel->m_Flags == getFlags(id) && channel->m_Verbosity == getVerbosity(id) && channel->m_SpewColor.GetRawColor() == getColor(id) && memchr(channel->m_Name, '\0', sizeof(channel->m_Name));
+		bool valid = channel && channel->m_ID == id && channel->m_Flags == getFlags(id) && channel->m_Verbosity == getVerbosity(id) && channel->m_SpewColor.GetRawColor() == getColor(id) && memchr(channel->m_Name, '\0', sizeof(channel->m_Name));
 
 		for (auto tag = channel->m_pFirstTag; valid && tag; tag = tag->m_pNextTag)
 			valid = Modules::IsInModule(*Modules::tier0, tag) && Modules::IsValidName(tag->m_pTagName);
@@ -118,7 +119,8 @@ bool Dump()
 		channels[channel->m_Name] = line + ")";
 	}
 
-	std::ofstream output(Globals::outputPath / "logging_channels.txt");
+	const auto path = Globals::outputPath / "logging_channels.txt";
+	std::ofstream output(path);
 	for (const auto& [name, line] : channels)
 	{
 		output << name << line << "\n";
@@ -127,6 +129,9 @@ bool Dump()
 
 	for (const auto& tag : tagNames)
 		Globals::stringsIgnoreStream << tag << "\n";
+
+	if (!CloseOutput(output, path))
+		return false;
 
 	spdlog::info("Wrote {} logging channels to logging_channels.txt", channels.size());
 	return true;

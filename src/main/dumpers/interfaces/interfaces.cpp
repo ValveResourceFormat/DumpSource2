@@ -21,8 +21,8 @@
 #include "globalvariables.h"
 #include "modules.h"
 #include "gamedata.h"
+#include "output.h"
 #include <interfaces/interfaces.h>
-#include <algorithm>
 #include <fstream>
 #include <map>
 #include <set>
@@ -31,6 +31,12 @@
 
 namespace Dumpers::Interfaces
 {
+
+// The list head load is a RIP relative mov (REX.W 8B with a disp32 operand), anything else means the code changed
+static bool IsRipRelativeLoad(const uint8_t* code)
+{
+	return (code[0] == 0x48 || code[0] == 0x4C) && code[1] == 0x8B && (code[2] & 0xC7) == 0x05;
+}
 
 // Returns false if a module exports CreateInterface but its interface list could not be found
 bool Dump()
@@ -49,8 +55,9 @@ bool Dump()
 			continue;
 
 		// The head and registrations are static objects in the module, so anything else means the code changed.
-		auto head = Modules::GetGlobalFromSignatureMatch<InterfaceReg*>(createInterface + GameData::g_CreateInterfaceListOffset);
-		auto regs = Modules::IsInModule(*module, head) ? *head : nullptr;
+		auto load = createInterface + GameData::g_CreateInterfaceListOffset;
+		auto head = IsRipRelativeLoad(load) ? Modules::GetGlobalFromSignatureMatch<InterfaceReg*>(load) : nullptr;
+		auto regs = head && Modules::IsInModule(*module, head) ? *head : nullptr;
 		bool valid = regs != nullptr;
 		std::set<std::string> names;
 
@@ -76,7 +83,8 @@ bool Dump()
 		return false;
 	}
 
-	std::ofstream output(Globals::outputPath / "interfaces.txt");
+	const auto path = Globals::outputPath / "interfaces.txt";
+	std::ofstream output(path);
 	size_t count = 0;
 
 	for (const auto& [module, names] : interfaces)
@@ -93,8 +101,10 @@ bool Dump()
 		count += names.size();
 	}
 
-	spdlog::info("Wrote {} interfaces from {} modules to interfaces.txt", count, interfaces.size());
+	if (!CloseOutput(output, path))
+		return false;
 
+	spdlog::info("Wrote {} interfaces from {} modules to interfaces.txt", count, interfaces.size());
 	return true;
 }
 
