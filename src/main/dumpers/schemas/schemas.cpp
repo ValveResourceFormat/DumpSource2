@@ -192,18 +192,18 @@ static bool DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<Intermediat
 
 		switch (enumInfo->m_nAlignment)
 		{
-		case 1:
-			alignment = "uint8_t";
-			break;
-		case 2:
-			alignment = "uint16_t";
-			break;
-		case 4:
-			alignment = "uint32_t";
-			break;
-		case 8:
-			alignment = "uint64_t";
-			break;
+			case 1:
+				alignment = "uint8_t";
+				break;
+			case 2:
+				alignment = "uint16_t";
+				break;
+			case 4:
+				alignment = "uint32_t";
+				break;
+			case 8:
+				alignment = "uint64_t";
+				break;
 		}
 
 		spdlog::trace("Dumping enum: '{}'", enumInfo->m_pszName);

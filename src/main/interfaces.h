@@ -22,7 +22,8 @@
 
 class CSchemaSystem;
 
-namespace Interfaces {
+namespace Interfaces
+{
 
 inline CSchemaSystem* schemaSystem = nullptr;
 inline ICvar* cvar = nullptr;

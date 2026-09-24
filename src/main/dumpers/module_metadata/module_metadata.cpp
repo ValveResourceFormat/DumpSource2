@@ -74,7 +74,6 @@ void Dump()
 			std::replace(sanitizedModuleName.begin(), sanitizedModuleName.end(), '/', '_');
 			foundModules.insert(sanitizedModuleName);
 
-
 			if (!std::filesystem::is_directory(outputPath) && !std::filesystem::create_directory(outputPath))
 			{
 				spdlog::error("Failed to create {}", outputPath.generic_string());

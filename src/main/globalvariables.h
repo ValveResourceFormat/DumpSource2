@@ -22,13 +22,14 @@
 #include <filesystem>
 #include <fstream>
 
-namespace Globals {
+namespace Globals
+{
 
-	inline std::filesystem::path outputPath;
-	inline std::stringstream stringsIgnoreStream;
+inline std::filesystem::path outputPath;
+inline std::stringstream stringsIgnoreStream;
 
-	inline std::string sourceRevision;
-	inline std::string versionDate;
-	inline std::string versionTime;
+inline std::string sourceRevision;
+inline std::string versionDate;
+inline std::string versionTime;
 
 } // namespace Globals

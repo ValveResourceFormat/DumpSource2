@@ -17,7 +17,6 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 // Yes this is shit, no we can't make it better.
 #define _ALLOW_KEYWORD_MACROS 1
 #define private public
@@ -44,68 +43,43 @@ namespace Dumpers::ConCommands
 
 using namespace GameData;
 
-#define MINMAXVALUEPRINT(typeName) \
-	stream << " " << value->typeName;													\
-																														\
-	bool hasMinValue = minValue != nullptr;										\
-	bool hasMaxValue = maxValue != nullptr;										\
-																														\
-	stream << " (";																						\
-																														\
-	if (hasMinValue)																					\
-		stream << "min: " << minValue->typeName;								\
-																														\
-	if (hasMaxValue)																					\
-	{																													\
-		if (hasMinValue)																				\
-			stream << ", ";																				\
-		stream << "max: " << maxValue->typeName;								\
-	}																													\
-																														\
-	if (hasMinValue || hasMaxValue)														\
-		stream << ", ";																					\
-																														\
-	WriteFlags(flags, stream);																\
-																														\
-	stream << ")";
-
-#define FCVAR_MISSING1	(1ull<<30)
-#define FCVAR_MISSING2	(1ull<<31)
+#define FCVAR_MISSING1 (1ull << 30)
+#define FCVAR_MISSING2 (1ull << 31)
 
 std::vector<std::pair<uint64_t, const char*>> g_flagMap{
-	{FCVAR_LINKED_CONCOMMAND, "linked_concommand"},
-	{FCVAR_DEVELOPMENTONLY, "developmentonly"},
-	{FCVAR_GAMEDLL, "gamedll"},
-	{FCVAR_CLIENTDLL, "clientdll"},
-	{FCVAR_HIDDEN, "hidden"},
-	{FCVAR_PROTECTED, "protected"},
-	{FCVAR_SPONLY, "sponly"},
-	{FCVAR_ARCHIVE, "archive"},
-	{FCVAR_NOTIFY, "notify"},
-	{FCVAR_USERINFO, "userinfo"},
-	{FCVAR_REFERENCE, "reference"},
-	{FCVAR_UNLOGGED, "unlogged"},
-	{FCVAR_INITIAL_SETVALUE, "initial_setvalue"},
-	{FCVAR_REPLICATED, "replicated"},
-	{FCVAR_CHEAT, "cheat"},
-	{FCVAR_PER_USER, "per_user"},
-	{FCVAR_DEMO, "demo"},
-	{FCVAR_DONTRECORD, "dontrecord"},
-	{FCVAR_PERFORMING_CALLBACKS, "performing_Callbacks"},
-	{FCVAR_RELEASE, "release"},
-	{FCVAR_MENUBAR_ITEM, "menubar_item"},
-	{FCVAR_COMMANDLINE_ENFORCED, "commandline_enforced"},
-	{FCVAR_NOT_CONNECTED, "notconnected"},
-	{FCVAR_VCONSOLE_FUZZY_MATCHING, "vconsole_fuzzy_matching"},
-	{FCVAR_SERVER_CAN_EXECUTE, "server_can_execute"},
-	{FCVAR_CLIENT_CAN_EXECUTE, "client_can_execute"},
-	{FCVAR_SERVER_CANNOT_QUERY, "server_cannot_query"},
-	{FCVAR_VCONSOLE_SET_FOCUS, "vconsole_set_focus"},
-	{FCVAR_CLIENTCMD_CAN_EXECUTE, "clientcmd_can_execute"},
-	{FCVAR_EXECUTE_PER_TICK, "execute_per_tick"},
-	{FCVAR_MISSING1, "missing1"},
-	{FCVAR_MISSING2, "missing2"},
-	{FCVAR_DEFENSIVE, "defensive"}
+	{ FCVAR_LINKED_CONCOMMAND, "linked_concommand" },
+	{ FCVAR_DEVELOPMENTONLY, "developmentonly" },
+	{ FCVAR_GAMEDLL, "gamedll" },
+	{ FCVAR_CLIENTDLL, "clientdll" },
+	{ FCVAR_HIDDEN, "hidden" },
+	{ FCVAR_PROTECTED, "protected" },
+	{ FCVAR_SPONLY, "sponly" },
+	{ FCVAR_ARCHIVE, "archive" },
+	{ FCVAR_NOTIFY, "notify" },
+	{ FCVAR_USERINFO, "userinfo" },
+	{ FCVAR_REFERENCE, "reference" },
+	{ FCVAR_UNLOGGED, "unlogged" },
+	{ FCVAR_INITIAL_SETVALUE, "initial_setvalue" },
+	{ FCVAR_REPLICATED, "replicated" },
+	{ FCVAR_CHEAT, "cheat" },
+	{ FCVAR_PER_USER, "per_user" },
+	{ FCVAR_DEMO, "demo" },
+	{ FCVAR_DONTRECORD, "dontrecord" },
+	{ FCVAR_PERFORMING_CALLBACKS, "performing_Callbacks" },
+	{ FCVAR_RELEASE, "release" },
+	{ FCVAR_MENUBAR_ITEM, "menubar_item" },
+	{ FCVAR_COMMANDLINE_ENFORCED, "commandline_enforced" },
+	{ FCVAR_NOT_CONNECTED, "notconnected" },
+	{ FCVAR_VCONSOLE_FUZZY_MATCHING, "vconsole_fuzzy_matching" },
+	{ FCVAR_SERVER_CAN_EXECUTE, "server_can_execute" },
+	{ FCVAR_CLIENT_CAN_EXECUTE, "client_can_execute" },
+	{ FCVAR_SERVER_CANNOT_QUERY, "server_cannot_query" },
+	{ FCVAR_VCONSOLE_SET_FOCUS, "vconsole_set_focus" },
+	{ FCVAR_CLIENTCMD_CAN_EXECUTE, "clientcmd_can_execute" },
+	{ FCVAR_EXECUTE_PER_TICK, "execute_per_tick" },
+	{ FCVAR_MISSING1, "missing1" },
+	{ FCVAR_MISSING2, "missing2" },
+	{ FCVAR_DEFENSIVE, "defensive" }
 };
 
 void WriteFlags(uint64_t flags, std::ostream& stream)
@@ -120,97 +94,107 @@ void WriteFlags(uint64_t flags, std::ostream& stream)
 		}
 	}
 }
+
+// Writes a numeric value with its min and max, the member selects which CVValue_t union member to print
+template <typename T>
+static void WriteMinMaxValue(T CVValue_t::* member, uint64_t flags, const CVValue_t* value, const CVValue_t* minValue, const CVValue_t* maxValue, std::ostream& stream)
+{
+	stream << " " << value->*member << " (";
+
+	if (minValue)
+		stream << "min: " << minValue->*member;
+
+	if (maxValue)
+	{
+		if (minValue)
+			stream << ", ";
+		stream << "max: " << maxValue->*member;
+	}
+
+	if (minValue || maxValue)
+		stream << ", ";
+
+	WriteFlags(flags, stream);
+	stream << ")";
+}
+
 void WriteValueLine(EConVarType type, uint64_t flags, const CVValue_t* value, const CVValue_t* minValue, const CVValue_t* maxValue, std::ostream& stream)
 {
 	switch (type)
 	{
-	case EConVarType_Bool:
-	{
-		stream << " " << (value->m_bValue ? "true" : "false") << " (";
-		WriteFlags(flags, stream);
-		stream << ")";
-		break;
-	}
-	case EConVarType_Int16:
-	{
-		MINMAXVALUEPRINT(m_i16Value);
-		break;
-	}
-	case EConVarType_Int32:
-	{
-		MINMAXVALUEPRINT(m_i32Value);
-		break;
-	}
-	case EConVarType_UInt32:
-	{
-		MINMAXVALUEPRINT(m_u32Value);
-		break;
-	}
-	case EConVarType_Int64:
-	{
-		MINMAXVALUEPRINT(m_i64Value);
-		break;
-	}
-	case EConVarType_UInt64:
-	{
-		MINMAXVALUEPRINT(m_u64Value);
-		break;
-	}
-	case EConVarType_Float32:
-	{
-		MINMAXVALUEPRINT(m_fl32Value);
-		break;
-	}
-	case EConVarType_Float64:
-	{
-		MINMAXVALUEPRINT(m_fl64Value);
-		break;
-	}
-	case EConVarType_String:
-	{
-		stream << " \"" << (value->m_StringValue.m_pString ? value->m_StringValue.m_pString : "") << "\"" << " (";
-		WriteFlags(flags, stream);
-		stream << ")";
-		break;
-	}
-	case EConVarType_Color:
-	{
-		stream << " [" << value->m_clrValue.r() << ", " << value->m_clrValue.g() << ", " << value->m_clrValue.b() << ", " << value->m_clrValue.a() << "]" << " (";
-		WriteFlags(flags, stream);
-		stream << ")";
-		break;
-	}
-	case EConVarType_Vector2:
-	{
-		stream << " [" << value->m_vec2Value.x << ", " << value->m_vec2Value.y << "]" << " (";
-		WriteFlags(flags, stream);
-		stream << ")";
-		break;
-	}
-	case EConVarType_Vector3:
-	{
-		stream << " [" << value->m_vec3Value.x << ", " << value->m_vec3Value.y << ", " << value->m_vec3Value.z << "]" << " (";
-		WriteFlags(flags, stream);
-		stream << ")";
-		break;
-	}
-	case EConVarType_Vector4:
-	{
-		stream << " [" << value->m_vec4Value.x << ", " << value->m_vec4Value.y << ", " << value->m_vec4Value.z << ", " << value->m_vec4Value.w << "]" << " (";
-		WriteFlags(flags, stream);
-		stream << ")";
-		break;
-	}
-	case EConVarType_Qangle:
-	{
-		stream << " [" << value->m_angValue.x << ", " << value->m_angValue.y << ", " << value->m_angValue.z << "]" << " (";
-		WriteFlags(flags, stream);
-		stream << ")";
-		break;
-	}
-	default:
-		stream << " UNKNOWN VALUE TYPE";
-		break;
+		case EConVarType_Bool:
+		{
+			stream << " " << (value->m_bValue ? "true" : "false") << " (";
+			WriteFlags(flags, stream);
+			stream << ")";
+			break;
+		}
+		case EConVarType_Int16:
+			WriteMinMaxValue(&CVValue_t::m_i16Value, flags, value, minValue, maxValue, stream);
+			break;
+		case EConVarType_Int32:
+			WriteMinMaxValue(&CVValue_t::m_i32Value, flags, value, minValue, maxValue, stream);
+			break;
+		case EConVarType_UInt32:
+			WriteMinMaxValue(&CVValue_t::m_u32Value, flags, value, minValue, maxValue, stream);
+			break;
+		case EConVarType_Int64:
+			WriteMinMaxValue(&CVValue_t::m_i64Value, flags, value, minValue, maxValue, stream);
+			break;
+		case EConVarType_UInt64:
+			WriteMinMaxValue(&CVValue_t::m_u64Value, flags, value, minValue, maxValue, stream);
+			break;
+		case EConVarType_Float32:
+			WriteMinMaxValue(&CVValue_t::m_fl32Value, flags, value, minValue, maxValue, stream);
+			break;
+		case EConVarType_Float64:
+			WriteMinMaxValue(&CVValue_t::m_fl64Value, flags, value, minValue, maxValue, stream);
+			break;
+		case EConVarType_String:
+		{
+			stream << " \"" << (value->m_StringValue.m_pString ? value->m_StringValue.m_pString : "") << "\"" << " (";
+			WriteFlags(flags, stream);
+			stream << ")";
+			break;
+		}
+		case EConVarType_Color:
+		{
+			stream << " [" << value->m_clrValue.r() << ", " << value->m_clrValue.g() << ", " << value->m_clrValue.b() << ", " << value->m_clrValue.a() << "]" << " (";
+			WriteFlags(flags, stream);
+			stream << ")";
+			break;
+		}
+		case EConVarType_Vector2:
+		{
+			stream << " [" << value->m_vec2Value.x << ", " << value->m_vec2Value.y << "]" << " (";
+			WriteFlags(flags, stream);
+			stream << ")";
+			break;
+		}
+		case EConVarType_Vector3:
+		{
+			stream << " [" << value->m_vec3Value.x << ", " << value->m_vec3Value.y << ", " << value->m_vec3Value.z << "]" << " (";
+			WriteFlags(flags, stream);
+			stream << ")";
+			break;
+		}
+		case EConVarType_Vector4:
+		{
+			stream << " [" << value->m_vec4Value.x << ", " << value->m_vec4Value.y << ", " << value->m_vec4Value.z << ", " << value->m_vec4Value.w << "]" << " (";
+			WriteFlags(flags, stream);
+			stream << ")";
+			break;
+		}
+		case EConVarType_Qangle:
+		{
+			stream << " [" << value->m_angValue.x << ", " << value->m_angValue.y << ", " << value->m_angValue.z << "]" << " (";
+			WriteFlags(flags, stream);
+			stream << ")";
+			break;
+		}
+		default:
+			stream << " UNKNOWN VALUE TYPE";
+			break;
 	}
 }
 
@@ -235,7 +219,8 @@ void FixNewlineTabbing(std::string& str)
 
 std::string EscapeDescription(std::string str)
 {
-	for (auto it = str.begin(); it != str.end(); it++) {
+	for (auto it = str.begin(); it != str.end(); it++)
+	{
 		if (*it == '\n')
 		{
 			*it = '\\';
@@ -434,7 +419,8 @@ static void WriteHelp(const char* name, const char* help, std::ofstream& output)
 	}
 
 	output << "\n\t" << helpString;
-	output << "\n" << std::endl;
+	output << "\n"
+		   << std::endl;
 
 	Globals::stringsIgnoreStream << name << "\n";
 }

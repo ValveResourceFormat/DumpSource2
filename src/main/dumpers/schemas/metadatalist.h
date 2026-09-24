@@ -22,13 +22,14 @@
 #pragma once
 #include <map>
 
- // List of printable metadata entries that are not tied to any structures.
- // These are used to determine if we can include the corresponding metadata entry value in the dump.
- // Original list sourced from Source2Gen project.
+// List of printable metadata entries that are not tied to any structures.
+// These are used to determine if we can include the corresponding metadata entry value in the dump.
+// Original list sourced from Source2Gen project.
 namespace Dumpers::Schemas
 {
 
-enum class MetadataValueType {
+enum class MetadataValueType
+{
 	STRING,
 	INLINE_STRING,
 	INTEGER,
@@ -42,8 +43,7 @@ enum class MetadataValueType {
 	DEBUGGER_BREAKPOINT
 };
 
-inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue
-{
+inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	// STRING
 	{ "MAlternateSemanticName", MetadataValueType::STRING },
 	{ "MCellForDomain", MetadataValueType::STRING },

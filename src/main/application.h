@@ -28,35 +28,104 @@ class DumperApplication : public CTier0AppSystem<IAppSystem>
 	virtual void Destructor2() {};
 #endif
 	virtual void PreShutdown() {};
-	virtual BuildType_t	GetBuildType() { return kBuildTypeRelease; };
+	virtual BuildType_t GetBuildType()
+	{
+		return kBuildTypeRelease;
+	};
 	virtual void Reconnect(CreateInterfaceFn factory, const char* interfaceName) {};
 
-
-	virtual int AddSystem(IAppSystem* pAppSystem, const char* interfaceName, bool errorOut) { return 0; };
-	virtual int AddSystem(const char* unk, const char* interfaceName, bool errorOut) { return 0; };
-	virtual int AddSystem(IAppSystem* pAppSystem, const char* interfaceName) { return 0; };
-	virtual void RemoveSystem(IAppSystem* pAppSystem) { };
-	virtual int AddSystems(int count, void** pAppSystems) { return 0; };
-	virtual void* FindSystem(const char* interfaceName) { return nullptr; };
-	virtual void* GetGameInfo() {
+	virtual int AddSystem(IAppSystem* pAppSystem, const char* interfaceName, bool errorOut)
+	{
+		return 0;
+	};
+	virtual int AddSystem(const char* unk, const char* interfaceName, bool errorOut)
+	{
+		return 0;
+	};
+	virtual int AddSystem(IAppSystem* pAppSystem, const char* interfaceName)
+	{
+		return 0;
+	};
+	virtual void RemoveSystem(IAppSystem* pAppSystem) {};
+	virtual int AddSystems(int count, void** pAppSystems)
+	{
+		return 0;
+	};
+	virtual void* FindSystem(const char* interfaceName)
+	{
+		return nullptr;
+	};
+	virtual void* GetGameInfo()
+	{
 		spdlog::debug("IApplication::GetGameInfo called, returning null");
 		return nullptr;
 	};
-	virtual unsigned int unk1() { return -1; };
-	virtual int GetUILanguage(int languageType) { return 0; };
-	virtual int GetAudioLanguage(int languageType) { return 0; };
-	virtual bool IsInToolsMode() { return false; };
-	virtual bool unk2() { return false; };
-	virtual bool unk3() { return false; };
-	virtual bool unk4() { return false; };
-	virtual void* unk5() { return nullptr; };
-	virtual void* unk6() { return nullptr; };
-	virtual void* unk7() { return nullptr; };
-	virtual void* unk8() { return nullptr; };
-	virtual void* unk9() { return nullptr; };
-	virtual void* unk10(void* a) { return a; };
-	virtual void* unk11() { return nullptr; };
-	virtual void* AddSystemDontLoadStartupManifests(const char* a, const char* b) { return nullptr; };
-	virtual void* unk12() { return nullptr; };
-	virtual void* unk13() { return nullptr; };
+	virtual unsigned int unk1()
+	{
+		return -1;
+	};
+	virtual int GetUILanguage(int languageType)
+	{
+		return 0;
+	};
+	virtual int GetAudioLanguage(int languageType)
+	{
+		return 0;
+	};
+	virtual bool IsInToolsMode()
+	{
+		return false;
+	};
+	virtual bool unk2()
+	{
+		return false;
+	};
+	virtual bool unk3()
+	{
+		return false;
+	};
+	virtual bool unk4()
+	{
+		return false;
+	};
+	virtual void* unk5()
+	{
+		return nullptr;
+	};
+	virtual void* unk6()
+	{
+		return nullptr;
+	};
+	virtual void* unk7()
+	{
+		return nullptr;
+	};
+	virtual void* unk8()
+	{
+		return nullptr;
+	};
+	virtual void* unk9()
+	{
+		return nullptr;
+	};
+	virtual void* unk10(void* a)
+	{
+		return a;
+	};
+	virtual void* unk11()
+	{
+		return nullptr;
+	};
+	virtual void* AddSystemDontLoadStartupManifests(const char* a, const char* b)
+	{
+		return nullptr;
+	};
+	virtual void* unk12()
+	{
+		return nullptr;
+	};
+	virtual void* unk13()
+	{
+		return nullptr;
+	};
 };
