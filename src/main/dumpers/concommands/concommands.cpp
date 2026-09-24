@@ -27,6 +27,7 @@
 #include "concommands.h"
 #include "globalvariables.h"
 #include <algorithm>
+#include <charconv>
 #include <iterator>
 #include <fstream>
 #include <vector>
@@ -104,20 +105,49 @@ void WriteFlags(uint64_t flags, std::ostream& stream)
 	}
 }
 
+// Floats are written as the shortest text that reads back as the same value, like 100.1 or 1000000 rather than 1e+06,
+// with at most 6 decimals for values that aren't exact in binary, like 0.015686275
+template <typename T>
+std::string FormatFloat(T value)
+{
+	char buffer[512];
+	std::string text(buffer, std::to_chars(buffer, std::end(buffer), value, std::chars_format::fixed).ptr);
+
+	if (auto dot = text.find('.'); dot != std::string::npos && text.size() - dot - 1 > 6)
+	{
+		text = fmt::format("{:.6f}", value);
+		text.erase(text.find_last_not_of('0') + 1);
+
+		if (text.back() == '.')
+			text.pop_back();
+	}
+
+	return text == "-0" ? "0" : text;
+}
+
+template <typename T>
+static std::string FormatNumber(T value)
+{
+	if constexpr (std::is_floating_point_v<T>)
+		return FormatFloat(value);
+	else
+		return std::to_string(value);
+}
+
 // Writes a numeric value with its min and max, the member selects which CVValue_t union member to print
 template <typename T>
 static void WriteMinMaxValue(T CVValue_t::* member, uint64_t flags, const CVValue_t* value, const CVValue_t* minValue, const CVValue_t* maxValue, std::ostream& stream)
 {
-	stream << " " << value->*member << " (";
+	stream << " " << FormatNumber(value->*member) << " (";
 
 	if (minValue)
-		stream << "min: " << minValue->*member;
+		stream << "min: " << FormatNumber(minValue->*member);
 
 	if (maxValue)
 	{
 		if (minValue)
 			stream << ", ";
-		stream << "max: " << maxValue->*member;
+		stream << "max: " << FormatNumber(maxValue->*member);
 	}
 
 	if (minValue || maxValue)
@@ -175,28 +205,28 @@ void WriteValueLine(EConVarType type, uint64_t flags, const CVValue_t* value, co
 		}
 		case EConVarType_Vector2:
 		{
-			stream << " [" << value->m_vec2Value.x << ", " << value->m_vec2Value.y << "]" << " (";
+			stream << " [" << FormatFloat(value->m_vec2Value.x) << ", " << FormatFloat(value->m_vec2Value.y) << "]" << " (";
 			WriteFlags(flags, stream);
 			stream << ")";
 			break;
 		}
 		case EConVarType_Vector3:
 		{
-			stream << " [" << value->m_vec3Value.x << ", " << value->m_vec3Value.y << ", " << value->m_vec3Value.z << "]" << " (";
+			stream << " [" << FormatFloat(value->m_vec3Value.x) << ", " << FormatFloat(value->m_vec3Value.y) << ", " << FormatFloat(value->m_vec3Value.z) << "]" << " (";
 			WriteFlags(flags, stream);
 			stream << ")";
 			break;
 		}
 		case EConVarType_Vector4:
 		{
-			stream << " [" << value->m_vec4Value.x << ", " << value->m_vec4Value.y << ", " << value->m_vec4Value.z << ", " << value->m_vec4Value.w << "]" << " (";
+			stream << " [" << FormatFloat(value->m_vec4Value.x) << ", " << FormatFloat(value->m_vec4Value.y) << ", " << FormatFloat(value->m_vec4Value.z) << ", " << FormatFloat(value->m_vec4Value.w) << "]" << " (";
 			WriteFlags(flags, stream);
 			stream << ")";
 			break;
 		}
 		case EConVarType_Qangle:
 		{
-			stream << " [" << value->m_angValue.x << ", " << value->m_angValue.y << ", " << value->m_angValue.z << "]" << " (";
+			stream << " [" << FormatFloat(value->m_angValue.x) << ", " << FormatFloat(value->m_angValue.y) << ", " << FormatFloat(value->m_angValue.z) << "]" << " (";
 			WriteFlags(flags, stream);
 			stream << ")";
 			break;
