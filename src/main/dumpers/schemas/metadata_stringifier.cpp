@@ -34,6 +34,11 @@
 #include <regex>
 #include "utils/common.h"
 
+#ifndef WIN32
+#include <sys/mman.h>
+#include <ucontext.h>
+#endif
+
 namespace Dumpers::Schemas
 {
 
@@ -75,22 +80,66 @@ std::vector<std::regex> g_regexFilters = {
 	std::regex(R"#(("vol":) .*)#"),
 };
 
-// Any function called after this will have uninitialized variables set to zero
+typedef void* (*GetKV3DefaultsFn)();
+
+// GetKV3Defaults serializes a default constructed object on the stack, so fields the constructor does not initialize
+// contain whatever was on the stack. Each call runs on a newly allocated stack, which is always zeroed.
 #ifdef WIN32
-__declspec(noinline)
-#else
-__attribute__((noinline))
-#endif
-void
-CleanStack()
+struct KV3DefaultsCall
 {
-	// stack size might need to be increased for larger classes (perhaps use alloca with class size + extra)
-	volatile char stack[0x10000];
-	for (size_t i = 0; i < sizeof(stack); ++i)
-	{
-		stack[i] = 0;
-	}
+	GetKV3DefaultsFn fn;
+	void* result;
+	void* returnFiber;
+};
+
+static void CALLBACK KV3DefaultsFiber(void* param)
+{
+	auto call = static_cast<KV3DefaultsCall*>(param);
+	call->result = call->fn();
+	SwitchToFiber(call->returnFiber);
 }
+
+static void* CallKV3Defaults(GetKV3DefaultsFn fn)
+{
+	static void* mainFiber = ConvertThreadToFiber(nullptr);
+
+	KV3DefaultsCall call{ fn, nullptr, mainFiber };
+	auto fiber = CreateFiber(0x100000, KV3DefaultsFiber, &call);
+	SwitchToFiber(fiber);
+	DeleteFiber(fiber);
+
+	return call.result;
+}
+#else
+static GetKV3DefaultsFn g_KV3DefaultsFn;
+static void* g_KV3DefaultsResult;
+
+static void KV3DefaultsContext()
+{
+	g_KV3DefaultsResult = g_KV3DefaultsFn();
+}
+
+static void* CallKV3Defaults(GetKV3DefaultsFn fn)
+{
+	constexpr size_t stackSize = 0x100000;
+	auto stack = mmap(nullptr, stackSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_STACK, -1, 0);
+	if (stack == MAP_FAILED)
+		return fn();
+
+	ucontext_t mainContext, context;
+	getcontext(&context);
+	context.uc_stack.ss_sp = stack;
+	context.uc_stack.ss_size = stackSize;
+	context.uc_link = &mainContext;
+	makecontext(&context, KV3DefaultsContext, 0);
+
+	g_KV3DefaultsFn = fn;
+	swapcontext(&mainContext, &context);
+	munmap(stack, stackSize);
+
+	return g_KV3DefaultsResult;
+}
+#endif
 
 // Determine how and if to output metadata entry value based on it's type.
 std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName)
@@ -164,14 +213,12 @@ std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData_t& ent
 			}
 			case MetadataValueType::KV3DEFAULTS:
 			{
-				typedef void* (*GetKV3DefaultsFn)();
 				typedef int (*SaveKV3AsJsonFn)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
 
 				if (!entry.m_pData || !(*(void**)entry.m_pData) || g_classWithBrokenDefaults.contains(metadataTargetName))
 					return "Could not parse KV3 Defaults";
 
-				CleanStack(); // Prepare stack for uninitialized variables in class constructor inside GetKV3Defaults
-				auto value = reinterpret_cast<GetKV3DefaultsFn>(*(void**)entry.m_pData)();
+				auto value = CallKV3Defaults(reinterpret_cast<GetKV3DefaultsFn>(*(void**)entry.m_pData));
 
 				if (!value)
 					return "Could not parse KV3 Defaults";
