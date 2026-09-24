@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(DumpSource2 C CXX)
+project(DumpSource2 CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,10 +10,6 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 include(${PROJECT_SOURCE_DIR}/cmake/platform.cmake)
 include_directories(src/main)
-include_directories(src)
 
-# Include all vendor libraries, also sets up HL2SDK and Metamod
 add_subdirectory(vendor)
-
-# Source
-add_subdirectory(src)
+add_subdirectory(src/main)

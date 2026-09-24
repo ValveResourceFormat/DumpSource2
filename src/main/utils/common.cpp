@@ -2,10 +2,9 @@
 #include <cstdarg>
 #include <stdlib.h>
 #include <stdio.h>
-#include "threadtools.h"
+#include "tier0/logging.h"
 #include "utlstring.h"
 #include "bufferstring.h"
-#include "utlbuffer.h"
 #include <spdlog/spdlog.h>
 
 const char* SimpleCUtlString::Get() {
@@ -24,6 +23,13 @@ void ExitError(const char* pMsg, ...)
 	exit(1);
 }
 
+// Stubs for tier0 functions, which is not linked.
+// The SDK interfaces library calls Plat_ExitProcess, the rest are called from SDK headers in debug builds.
+
+void Plat_ExitProcess(int) {
+	// STUB
+}
+
 LoggingResponse_t LoggingSystem_LogAssert(const char* pMessageFormat, ...)
 {
 	return LR_ABORT;
@@ -39,21 +45,7 @@ const char* CBufferString::Insert(int, char const *, int, bool) {
 	return nullptr;
 }
 
-int CBufferString::AppendFormat(char const*, ...) {
-	// STUB
-	return 0;
-}
-
 int CBufferString::Format(char const*, ...) {
-	// STUB
-	return 0;
-}
-
-void CBufferString::Purge(int) {
-	// STUB
-}
-
-int CUtlBuffer::ParseToken(struct characterset_t const*, char*, int, bool) {
 	// STUB
 	return 0;
 }
@@ -68,57 +60,6 @@ void CUtlString::Set(const char*) {
 
 void CUtlString::SetDirect(const char*, int) {
 	// STUB
-}
-
-void CUtlString::Trim(const char*) {
-	// STUB
-}
-
-CUtlBuffer::CUtlBuffer(const void*, int, CUtlBuffer::BufferFlags_t) {
-	// STUB
-}
-
-void ConMsg(const char*, ...) {
-	// STUB
-}
-
-// STUB
-IMemAlloc* g_pMemAlloc = nullptr;
-
-void Plat_ExitProcess(int) {
-	// STUB
-}
-
-bool Plat_IsInDebugSession() {
-	// STUB
-	return false;
-}
-
-void* UtlMemory_Alloc(void*, bool, int, int) {
-	// STUB
-	return nullptr;
-}
-
-int UtlMemory_CalcNewAllocationCount(int, int, int, int)
-{
-	// STUB
-	return 0;
-}
-
-void UtlMemory_FailedAllocation(int, int) {
-	// STUB
-}
-
-int64 V_atoi(const char*)
-{
-	// STUB
-	return 0;
-}
-
-int V_stricmp_fast(const char*, const char*)
-{
-	// STUB
-	return 0;
 }
 
 bool V_StringToBool(const char*, bool, bool*, char**, uint, IParsingErrorListener*)
@@ -206,30 +147,4 @@ void V_StringToVectorWS(const char*, VectorWS&, bool*, char**, uint, IParsingErr
 int V_tier0_strlen(const char*) {
 	// STUB
 	return 0;
-}
-
-void Warning(const char*, ...) {
-	// STUB
-}
-
-void UtlVectorMemory_FailedAllocation(int, int) {
-	// STUB
-}
-
-int	UtlVectorMemory_CalcNewAllocationCount(int, int, int, int) {
-	// STUB
-	return 0;
-}
-
-void* UtlVectorMemory_Alloc(void*, bool, int, int) {
-	// STUB
-	return nullptr;
-}
-
-void V_tier0_memmove(void*, const void*, size_t) {
-	// STUB
-}
-
-void Msg(const tchar* pMsg, ...) {
-	// STUB
 }

@@ -20,14 +20,8 @@ jobs:
       with:
         submodules: 'true'
 
-    - name: Setup CMake
-      uses: lukka/get-cmake@latest
-
-    - name: Create build directory
-      run: mkdir build
-
     - name: Configure CMake
-      run: cmake -B build -S .
+      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 
     - name: Build
       run: cmake --build build --parallel 4 --config Release

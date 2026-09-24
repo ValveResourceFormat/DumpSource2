@@ -1,16 +1,9 @@
-add_definitions(-DMETA_IS_SOURCE2 -D_ITERATOR_DEBUG_LEVEL=0)
-
 if(UNIX)
-	add_definitions(
-		-D_LINUX -DPOSIX -DLINUX -DGNUC -DCOMPILER_GCC -DPLATFORM_64BITS -D_GLIBCXX_USE_CXX11_ABI=0 -Dstricmp=strcasecmp
-		-D_stricmp=strcasecmp -D_snprintf=snprintf -D_vsnprintf=vsnprintf -DHAVE_STDINT_H -DX64BITS
-		)
-	set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -static-libgcc -static-libstdc++")
-elseif(WIN32)
-	add_definitions(
-		-DCOMPILER_MSVC -DCOMPILER_MSVC64 -DPLATFORM_64BITS -DWIN32 -DWINDOWS -DCRT_SECURE_NO_WARNINGS
-		-DCRT_SECURE_NO_DEPRECATE -DCRT_NONSTDC_NO_DEPRECATE -DNOMINMAX -DX64BITS
+	add_compile_definitions(
+		_LINUX POSIX LINUX GNUC COMPILER_GCC PLATFORM_64BITS _GLIBCXX_USE_CXX11_ABI=0 stricmp=strcasecmp
+		_stricmp=strcasecmp _snprintf=snprintf _vsnprintf=vsnprintf HAVE_STDINT_H X64BITS
 	)
-
-	add_definitions(/MP)
+elseif(WIN32)
+	add_compile_definitions(COMPILER_MSVC COMPILER_MSVC64 PLATFORM_64BITS WIN32 WINDOWS NOMINMAX X64BITS _ITERATOR_DEBUG_LEVEL=0)
+	add_compile_options(/MP)
 endif()
