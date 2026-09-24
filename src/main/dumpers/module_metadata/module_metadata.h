@@ -18,9 +18,16 @@
  */
 #pragma once
 
+#include <nlohmann/json.hpp>
+
+class CModule;
+
 namespace Dumpers::ModuleMetadata
 {
 
 void Dump();
+
+// The module's metadata converted to JSON, null if the module has none, discarded if it could not be converted
+nlohmann::ordered_json GetJSON(const CModule& module);
 
 } // namespace Dumpers::ModuleMetadata

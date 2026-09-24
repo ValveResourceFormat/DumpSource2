@@ -79,7 +79,7 @@ static const char* ValidateClass(const SchemaClassInfoData_t* classInfo)
 	return nullptr;
 }
 
-static const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
+const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
 {
 	if (!Modules::FindModuleContaining(enumInfo))
 		return "enum info pointer";
@@ -249,21 +249,30 @@ static bool DumpTypeScope(CSchemaSystemTypeScope* typeScope, std::vector<Interme
 	return DumpClasses(typeScope, classes) && DumpEnums(typeScope, enums);
 }
 
+std::vector<CSchemaSystemTypeScope*> GetTypeScopes()
+{
+	auto schemaSystem = Interfaces::schemaSystem;
+	const auto& typeScopes = schemaSystem->m_TypeScopes;
+
+	std::vector<CSchemaSystemTypeScope*> scopes;
+	for (auto i = 0; i < typeScopes.m_Vector.Count(); ++i)
+		scopes.push_back(typeScopes[i]);
+
+	scopes.push_back(schemaSystem->GlobalTypeScope());
+	return scopes;
+}
+
 // Returns false if the schemas could not be read, which are then not written to keep the previous dump
 bool Dump()
 {
-	auto schemaSystem = Interfaces::schemaSystem;
-
-	const auto& typeScopes = schemaSystem->m_TypeScopes;
 	std::vector<IntermediateSchemaEnum> enums;
 	std::vector<IntermediateSchemaClass> classes;
-	bool valid = true;
 
-	for (auto i = 0; valid && i < typeScopes.m_Vector.Count(); ++i)
-		valid = DumpTypeScope(typeScopes[i], enums, classes);
-
-	if (!valid || !DumpTypeScope(schemaSystem->GlobalTypeScope(), enums, classes))
-		return false;
+	for (auto typeScope : GetTypeScopes())
+	{
+		if (!DumpTypeScope(typeScope, enums, classes))
+			return false;
+	}
 
 	// Schema system order depends on registration order, sort so the output is stable between runs
 	auto byModuleAndName = [](const auto& a, const auto& b) { return std::tie(a.module, a.name) < std::tie(b.module, b.name); };

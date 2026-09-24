@@ -206,6 +206,15 @@ inline const byte g_EntityClassListSignature[] = "\x48\x8B\x35\x2A\x2A\x2A\x2A\x
 inline const byte g_EntityClassListSignature[] = "\x48\x8B\x1D\x2A\x2A\x2A\x2A\x48\x89\x75\xB0\x48\x85\xDB";
 #endif
 
+// Datadesc field flags for array keys named from a pattern like "cpoint%d", one key per element counting from 0 or 1.
+// The SDK has the older FTYPEDESC_* numbering.
+// To update, find where the key names are generated from the pattern in server.
+inline constexpr int g_FieldGenArrayKeyNames0 = 1 << 8;
+inline constexpr int g_FieldGenArrayKeyNames1 = 1 << 9;
+
+// Datadesc field flag for keys that were removed, which the game ignores
+inline constexpr int g_FieldRemovedKeyField = 1 << 14;
+
 // Modules that always link entities, not finding their list means the signature is outdated
 inline const std::unordered_set<std::string> g_RequiredEntityModules = { "client", "server" };
 

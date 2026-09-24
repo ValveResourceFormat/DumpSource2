@@ -30,12 +30,11 @@
 namespace Dumpers::ModuleMetadata
 {
 
-void GetModuleMetadata(const CModule& module, SimpleCUtlString& err, SimpleCUtlString& buf)
+// Returns the module's metadata KV3, or null if it has none
+static void* ExtractModuleMetadata(const CModule& module)
 {
-	spdlog::trace("Dumping metadata for {}", module.m_pszModule);
-
-	typedef void* (*ExtractModuleMetadata)(SimpleCUtlString& str);
-	auto extractModuleMetadataFn = module.GetSymbol<ExtractModuleMetadata>("ExtractModuleMetadata");
+	typedef void* (*ExtractModuleMetadataFn)(SimpleCUtlString& str);
+	auto extractModuleMetadataFn = module.GetSymbol<ExtractModuleMetadataFn>("ExtractModuleMetadata");
 
 	SimpleCUtlString additional_info;
 	auto kv3 = extractModuleMetadataFn(additional_info);
@@ -46,16 +45,46 @@ void GetModuleMetadata(const CModule& module, SimpleCUtlString& err, SimpleCUtlS
 		if (additional_info.Get())
 			spdlog::debug("{} has no metadata: {}", module.m_pszModule, additional_info.Get());
 
-		return;
+		return nullptr;
 	}
+
+	if (additional_info.Get())
+		spdlog::warn("{} has additional_info {}", module.m_pszModule, additional_info.Get());
+
+	return kv3;
+}
+
+void GetModuleMetadata(const CModule& module, SimpleCUtlString& err, SimpleCUtlString& buf)
+{
+	spdlog::trace("Dumping metadata for {}", module.m_pszModule);
+
+	auto kv3 = ExtractModuleMetadata(module);
+	if (!kv3)
+		return;
 
 	typedef int (*SaveKV3Text_ToString)(KV3ID_t const&, void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
 	static auto saveKV3Text_ToStringFn = Modules::tier0->GetSymbol<SaveKV3Text_ToString>(GameData::g_SaveKV3TextToStringSymbol);
 
 	saveKV3Text_ToStringFn(g_KV3Encoding_Text, kv3, err, buf);
+}
 
-	if (additional_info.Get())
-		spdlog::warn("{} has additional_info {}", module.m_pszModule, additional_info.Get());
+nlohmann::ordered_json GetJSON(const CModule& module)
+{
+	auto kv3 = ExtractModuleMetadata(module);
+	if (!kv3)
+		return nullptr;
+
+	typedef int (*SaveKV3AsJSON)(void* kv3, SimpleCUtlString& err, SimpleCUtlString& str);
+	static auto saveKV3AsJSONFn = Modules::tier0->GetSymbol<SaveKV3AsJSON>(GameData::g_SaveKV3AsJSONSymbol);
+
+	SimpleCUtlString err, buf;
+	if (!saveKV3AsJSONFn(kv3, err, buf) || !buf.Get())
+	{
+		spdlog::error("Failed to convert {} metadata to JSON: {}", module.m_pszModule, err.Get() ? err.Get() : "");
+		return nlohmann::ordered_json::value_t::discarded;
+	}
+
+	return nlohmann::ordered_json::parse(buf.Get(), nullptr, false);
 }
 
 void Dump()

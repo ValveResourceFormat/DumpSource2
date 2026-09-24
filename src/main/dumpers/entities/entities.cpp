@@ -21,15 +21,29 @@
 #include "gamedata.h"
 #include "globalvariables.h"
 #include "modules.h"
+#include "interfaces.h"
+#include "dumpers/module_metadata/module_metadata.h"
+#include "dumpers/schemas/schemas.h"
 #include <entity2/entityclass.h>
 #include <datamap.h>
+#include <schemasystem/schemasystem.h>
+#include <algorithm>
+#include <cctype>
 #include <climits>
+#include <cstring>
+#include <filesystem>
+#include <functional>
 #include <fstream>
 #include <iterator>
 #include <map>
 #include <string>
+#include <string_view>
+#include <tuple>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <fmt/printf.h>
+#include <fmt/ranges.h>
 #include <spdlog/spdlog.h>
 
 namespace Dumpers::Entities
@@ -42,11 +56,12 @@ using namespace GameData;
 
 struct EntityClass_t
 {
-	std::string m_CPPClassName;
-	std::string m_BaseDesignName;
+	const CEntityClassInfo* m_pClassInfo;
+	std::string m_BaseName;
 	std::string m_Details;
-	std::vector<std::string> m_ComponentOverrides;
-	std::vector<std::string> m_KeyFields;
+	std::vector<std::string> m_Lines;
+	std::vector<std::string> m_Inputs;
+	std::vector<std::string> m_Outputs;
 	std::vector<std::string> m_Strings;
 };
 
@@ -67,7 +82,7 @@ static const std::pair<int, const char*> g_ClassFlagNames[] = {
 // Classes override a few components at most, more means the array is not what it's expected to be
 static constexpr int g_MaxComponentOverrides = 64;
 
-// Flags, spawnability and spawn order, which only a few classes set
+// Flags and spawn order, which only a few classes set
 static std::string GetClassDetails(const CEntityClass* entityClass)
 {
 	std::string details;
@@ -85,59 +100,57 @@ static std::string GetClassDetails(const CEntityClass* entityClass)
 	if (flags)
 		details += fmt::format(", ECF_UNKNOWN_{:X}", flags);
 
-	if (entityClass->m_pClassInfo->m_nFlags & ECIF_NOT_SPAWNABLE)
-		details += ", ECIF_NOT_SPAWNABLE";
-
 	if (entityClass->m_SpawnOrder)
 		details += fmt::format(", spawn order {}", entityClass->m_SpawnOrder);
 
 	return details;
 }
 
-static const char* g_FieldTypeNames[] = {
-	"FIELD_VOID",
-	"FIELD_FLOAT32",
-	"FIELD_STRING",
-	"FIELD_VECTOR",
-	"FIELD_QUATERNION",
-	"FIELD_INT32",
-	"FIELD_BOOLEAN",
-	"FIELD_INT16",
-	"FIELD_CHARACTER",
-	"FIELD_COLOR32",
-	"FIELD_EMBEDDED",
-	"FIELD_EHANDLE",
-	"FIELD_POSITION_VECTOR",
-	"FIELD_TIME",
-	"FIELD_TICK",
-	"FIELD_SOUNDNAME",
-	"FIELD_VECTOR2D",
-	"FIELD_INT64",
-	"FIELD_VECTOR4D",
-	"FIELD_UINT64",
-	"FIELD_UINT32",
-	"FIELD_UTLSTRINGTOKEN",
-	"FIELD_QANGLE",
-	"FIELD_NETWORK_ORIGIN_CELL_QUANTIZED_VECTOR",
-	"FIELD_HMATERIAL",
-	"FIELD_HMODEL",
-	"FIELD_NETWORK_QUANTIZED_VECTOR",
-	"FIELD_NETWORK_QUANTIZED_FLOAT",
-	"FIELD_DIRECTION_VECTOR_WORLDSPACE",
-	"FIELD_QANGLE_WORLDSPACE",
-	"FIELD_QUATERNION_WORLDSPACE",
-	"FIELD_UTLSTRING",
-	"FIELD_HRENDERTEXTURE",
-	"FIELD_HPARTICLESYSTEMDEFINITION",
-	"FIELD_UINT8",
-	"FIELD_UINT16",
-	"FIELD_HPOSTPROCESSING",
-	"FIELD_AMMO_INDEX",
-	"FIELD_MODIFIER_HANDLE",
-	"FIELD_HVDATA",
-	"FIELD_GLOBALSYMBOL",
-	"FIELD_NETWORK_QUANTIZED_VECTORWS",
-	"FIELD_NETWORK_ORIGIN_CELL_QUANTIZED_VECTORWS",
+// Datadesc field types, and the FGD key type Hammer knows for them
+static const std::pair<const char*, const char*> g_FieldTypeNames[] = {
+	{ "FIELD_VOID", "string" },
+	{ "FIELD_FLOAT32", "float" },
+	{ "FIELD_STRING", "string" },
+	{ "FIELD_VECTOR", "vector" },
+	{ "FIELD_QUATERNION", "string" },
+	{ "FIELD_INT32", "integer" },
+	{ "FIELD_BOOLEAN", "boolean" },
+	{ "FIELD_INT16", "integer" },
+	{ "FIELD_CHARACTER", "string" },
+	{ "FIELD_COLOR32", "color255" },
+	{ "FIELD_EMBEDDED", "void" },
+	{ "FIELD_EHANDLE", "target_destination" },
+	{ "FIELD_POSITION_VECTOR", "vector" },
+	{ "FIELD_TIME", "float" },
+	{ "FIELD_TICK", "integer" },
+	{ "FIELD_SOUNDNAME", "sound" },
+	{ "FIELD_VECTOR2D", "vector2d" },
+	{ "FIELD_INT64", "integer" },
+	{ "FIELD_VECTOR4D", "string" },
+	{ "FIELD_UINT64", "integer" },
+	{ "FIELD_UINT32", "integer" },
+	{ "FIELD_UTLSTRINGTOKEN", "string" },
+	{ "FIELD_QANGLE", "angle" },
+	{ "FIELD_NETWORK_ORIGIN_CELL_QUANTIZED_VECTOR", "vector" },
+	{ "FIELD_HMATERIAL", "material" },
+	{ "FIELD_HMODEL", "studio" },
+	{ "FIELD_NETWORK_QUANTIZED_VECTOR", "vector" },
+	{ "FIELD_NETWORK_QUANTIZED_FLOAT", "float" },
+	{ "FIELD_DIRECTION_VECTOR_WORLDSPACE", "vector" },
+	{ "FIELD_QANGLE_WORLDSPACE", "angle" },
+	{ "FIELD_QUATERNION_WORLDSPACE", "string" },
+	{ "FIELD_UTLSTRING", "string" },
+	{ "FIELD_HRENDERTEXTURE", "resource:texture" },
+	{ "FIELD_HPARTICLESYSTEMDEFINITION", "particlesystem" },
+	{ "FIELD_UINT8", "integer" },
+	{ "FIELD_UINT16", "integer" },
+	{ "FIELD_HPOSTPROCESSING", "resource:postprocessing" },
+	{ "FIELD_AMMO_INDEX", "integer" },
+	{ "FIELD_MODIFIER_HANDLE", "string" },
+	{ "FIELD_HVDATA", "string" },
+	{ "FIELD_GLOBALSYMBOL", "string" },
+	{ "FIELD_NETWORK_QUANTIZED_VECTORWS", "vector" },
+	{ "FIELD_NETWORK_ORIGIN_CELL_QUANTIZED_VECTORWS", "vector" },
 };
 
 static_assert(std::size(g_FieldTypeNames) == (size_t)SpawnKeyType_t::FIELD_TYPECOUNT, "Field type names do not match SpawnKeyType_t in the SDK");
@@ -145,9 +158,12 @@ static_assert(std::size(g_FieldTypeNames) == (size_t)SpawnKeyType_t::FIELD_TYPEC
 // Procedural keyfields are handled in code and have no field
 static constexpr int g_ProceduralKeyFieldOffset = INT_MAX;
 
-static std::string GetFieldTypeName(SpawnKeyType_t type)
+static std::pair<std::string, std::string> GetFieldTypeNames(SpawnKeyType_t type)
 {
-	return (size_t)type < std::size(g_FieldTypeNames) ? g_FieldTypeNames[(size_t)type] : fmt::format("FIELD_UNKNOWN_{}", (int)type);
+	if ((size_t)type < std::size(g_FieldTypeNames))
+		return g_FieldTypeNames[(size_t)type];
+
+	return { fmt::format("FIELD_UNKNOWN_{}", (int)type), "string" };
 }
 
 // Datamaps are static objects in the module, but some build their fields on load, so only the names can be checked.
@@ -178,8 +194,79 @@ static const char* ValidateDataMap(const datamap_t* map)
 	return nullptr;
 }
 
-// Keys that can be set on the entity, with embedded datamaps (like CCollisionProperty) indented under their field
-static void AddKeyFields(const datamap_t* map, const std::string& indent, std::vector<std::string>& lines, std::vector<std::string>& strings)
+using EnumMap = std::unordered_map<std::string, const SchemaEnumInfoData_t*>;
+
+// Schema enums by name, which have the values of enum keys. Enums shared by client and server are only in one of their scopes,
+// and others are in library scopes, so all scopes are used. The module's own scope comes first, then the others by name.
+// Returns false if an enum is invalid.
+static bool GetModuleEnums(const CModule& module, EnumMap& enums)
+{
+	if (!Interfaces::schemaSystem)
+	{
+		spdlog::critical("Schema system is not initialized, can't read the values of entity enum keys");
+		return false;
+	}
+
+	const auto moduleScopeName = fmt::format("{}{}{}", MODULE_PREFIX, module.m_pszModule, MODULE_EXT);
+	auto scopes = Schemas::GetTypeScopes();
+
+	std::sort(scopes.begin(), scopes.end(), [&](auto a, auto b) {
+		return std::make_tuple(moduleScopeName != a->m_szScopeName, std::string_view(a->m_szScopeName)) < std::make_tuple(moduleScopeName != b->m_szScopeName, std::string_view(b->m_szScopeName));
+	});
+
+	for (auto typeScope : scopes)
+	{
+		FOR_EACH_MAP(typeScope->m_DeclaredEnums.m_Map, iter)
+		{
+			const auto enumInfo = typeScope->m_DeclaredEnums.m_Map.Element(iter)->m_pEnumInfo;
+
+			if (auto invalid = Schemas::ValidateEnum(enumInfo))
+			{
+				spdlog::critical("Schema enum in {} has an invalid {}, SchemaEnumInfoData_t in the SDK needs updating", typeScope->m_szScopeName, invalid);
+				return false;
+			}
+
+			enums.try_emplace(enumInfo->m_pszName, enumInfo);
+		}
+	}
+
+	return true;
+}
+
+// Keys of arrays are named from a pattern like "cpoint%d" or "Filter%02d", one key per element.
+// Returns nothing if the pattern is not understood. Returns false if the array flags don't match the pattern.
+static bool GetArrayKeyNames(const typedescription_t& field, const char* key, std::vector<std::string>& names)
+{
+	const bool isArray = field.flags & (g_FieldGenArrayKeyNames0 | g_FieldGenArrayKeyNames1);
+
+	// Only %d with an optional zero padded width is used, like the game formats them
+	auto spec = strchr(key, '%');
+	if (spec)
+	{
+		for (spec++; std::isdigit((unsigned char)*spec); spec++)
+			;
+	}
+
+	const bool isPattern = spec && *spec == 'd' && !strchr(spec, '%');
+
+	// Keys without a pattern having these flags means the flags in gamedata.h are outdated
+	if (isArray != isPattern)
+		return !isArray;
+
+	if (isArray)
+	{
+		const int start = (field.flags & g_FieldGenArrayKeyNames1) ? 1 : 0;
+		for (int i = 0; i < field.fieldSize; i++)
+			names.push_back(fmt::sprintf(key, start + i));
+	}
+
+	return true;
+}
+
+// Keys that can be set on the entity as FGD keys, with the datadesc type and C++ field in a comment.
+// Enum keys list their values as choices. Keys from embedded datamaps (like CCollisionProperty) are indented under a comment with their field.
+// Returns false if the datamap is not what it's expected to be.
+static bool AddKeyFields(const datamap_t* map, const EnumMap& enums, const std::string& indent, std::vector<std::string>& lines, std::vector<std::string>& strings)
 {
 	for (int i = 0; i < map->dataNumFields; i++)
 	{
@@ -187,39 +274,248 @@ static void AddKeyFields(const datamap_t* map, const std::string& indent, std::v
 		if (!field.fieldName || !field.fieldName[0])
 			continue;
 
-		auto type = GetFieldTypeName(field.fieldType);
-
 		if (field.fieldType == SpawnKeyType_t::FIELD_EMBEDDED)
 		{
 			if (!field.td)
 				continue;
 
 			std::vector<std::string> embedded;
-			AddKeyFields(field.td, indent + "\t", embedded, strings);
+			if (!AddKeyFields(field.td, enums, indent + "\t", embedded, strings))
+				return false;
 
 			if (!embedded.empty())
 			{
-				lines.push_back(fmt::format("{}{}: {} ({})", indent, field.fieldName, type, field.td->dataClassName));
+				lines.push_back(fmt::format("{}// {} ({})", indent, field.fieldName, field.td->dataClassName));
 				lines.insert(lines.end(), embedded.begin(), embedded.end());
 			}
 
 			continue;
 		}
 
-		// The union holds an enum name for enum fields
-		auto enumName = Modules::IsValidName(field.enumName) ? fmt::format(" ({})", field.enumName) : "";
+		// Procedural keys are handled in code and have no C++ field
+		const bool isProcedural = field.fieldOffset == g_ProceduralKeyFieldOffset;
+		const char* key = isProcedural ? field.fieldName : field.externalName;
+		if (!key || !key[0])
+			continue;
 
-		if (field.fieldOffset == g_ProceduralKeyFieldOffset)
+		auto [typeName, fgdType] = GetFieldTypeNames(field.fieldType);
+
+		// FGDs remove keys a base class has with this type
+		if (field.flags & g_FieldRemovedKeyField)
+			fgdType = "remove_key";
+
+		auto cppField = isProcedural ? std::string() : fmt::format(" {}", field.fieldName);
+
+		// The union holds an enum name for enum fields
+		const SchemaEnumInfoData_t* enumInfo = nullptr;
+		std::string enumComment;
+		if (Modules::IsValidName(field.enumName))
 		{
-			lines.push_back(fmt::format("{}{}: {}{}", indent, field.fieldName, type, enumName));
-			strings.push_back(field.fieldName);
+			if (auto it = enums.find(field.enumName); it != enums.end())
+				enumInfo = it->second;
+			else
+				spdlog::warn("Enum {} of key {} in {} is not in the schema system", field.enumName, key, map->dataClassName);
+
+			enumComment = fmt::format(" ({})", field.enumName);
 		}
-		else if (field.externalName && field.externalName[0])
+
+		strings.push_back(key);
+
+		std::vector<std::string> arrayKeyNames;
+		if (!GetArrayKeyNames(field, key, arrayKeyNames))
 		{
-			lines.push_back(fmt::format("{}{}: {} {}{}", indent, field.externalName, type, field.fieldName, enumName));
-			strings.push_back(field.externalName);
+			spdlog::critical("Key {} of {} has array flags {:X} without a key name pattern, the flags in gamedata.h need updating", key, map->dataClassName, field.flags);
+			return false;
+		}
+
+		// Procedural keys like weapon%d are named in code and have no array size
+		if (arrayKeyNames.empty() && strchr(key, '%'))
+		{
+			lines.push_back(fmt::format("{}// {}({}) // {}{}{}", indent, key, fgdType, typeName, cppField, enumComment));
+			continue;
+		}
+
+		if (arrayKeyNames.empty())
+			arrayKeyNames.push_back(key);
+
+		for (size_t k = 0; k < arrayKeyNames.size(); k++)
+		{
+			const auto& keyName = arrayKeyNames[k];
+			auto comment = fmt::format("{}{}{}{}", typeName, cppField, keyName != key ? fmt::format("[{}]", k) : "", enumComment);
+
+			if (!enumInfo)
+			{
+				lines.push_back(fmt::format("{}{}({}) // {}", indent, keyName, fgdType, comment));
+				continue;
+			}
+
+			lines.push_back(fmt::format("{}{}(intchoices) : \"{}\" : : \"\" = // {}", indent, keyName, keyName, comment));
+			lines.push_back(indent + "[");
+
+			for (uint16_t e = 0; e < enumInfo->m_nEnumeratorCount; e++)
+				lines.push_back(fmt::format("{}\t{} : \"{}\"", indent, enumInfo->m_pEnumerators[e].m_nValue, enumInfo->m_pEnumerators[e].m_pszName));
+
+			lines.push_back(indent + "]");
 		}
 	}
+
+	return true;
+}
+
+// Whether a Pulse type is the base type or one of its subtypes, like PVAL_EHANDLE:trigger or PVAL_VEC3_WORLDSPACE
+static bool IsPulseType(const std::string& type, std::string_view baseType)
+{
+	return type.starts_with(baseType) && (type.size() == baseType.size() || type[baseType.size()] == ':' || type[baseType.size()] == '_');
+}
+
+// FGD type of an input or output with one parameter, like Valve's FGDs use them
+static const char* GetPulseFGDType(const std::string& type)
+{
+	static const std::pair<const char*, const char*> pulseTypes[] = {
+		{ "PVAL_FLOAT", "float" },
+		{ "PVAL_INT", "integer" },
+		{ "PVAL_BOOL", "boolean" },
+		{ "PVAL_STRING", "string" },
+		{ "PVAL_COLOR_RGB", "color255" },
+		{ "PVAL_VEC3", "vector" },
+		{ "PVAL_EHANDLE", "target_destination" },
+	};
+
+	for (const auto& [pulseType, fgdType] : pulseTypes)
+	{
+		if (IsPulseType(type, pulseType))
+			return fgdType;
+	}
+
+	return "string";
+}
+
+// Pulse parameters as "type name" for comments, without the target parameter
+static std::vector<std::string> GetPulseParams(const nlohmann::ordered_json& meta, const char* paramsKey, const std::string& targetArg)
+{
+	std::vector<std::string> params;
+
+	if (auto it = meta.find(paramsKey); it != meta.end() && it->is_object())
+	{
+		for (const auto& [name, param] : it->items())
+		{
+			if (name != targetArg)
+				params.push_back(fmt::format("{} {}", param.value("type", std::string()), name));
+		}
+	}
+
+	return params;
+}
+
+// Entity inputs and outputs are Pulse bindings in the module metadata, on the API class of the entity (like CBaseTrigger_API).
+// Their target parameter is a handle to the entity's design name, or to any entity for the base entity API.
+// Returns false if the metadata is not what it's expected to be.
+static bool AddInputsAndOutputs(const CModule& module, const std::string& rootName, std::map<std::string, EntityClass_t>& classes)
+{
+	auto metadata = ModuleMetadata::GetJSON(module);
+
+#ifndef _WIN32
+	// Modules have no metadata on Linux
+	if (metadata.is_null())
+	{
+		spdlog::info("{} has no module metadata, not writing entity inputs and outputs", module.m_pszModule);
+		return true;
+	}
+#endif
+
+	static const auto bindingsPointer = "/pulse_bindings/gamedata/m_Classes"_json_pointer;
+	if (!metadata.is_object() || !metadata.contains(bindingsPointer) || !metadata[bindingsPointer].is_object())
+	{
+		spdlog::critical("Module metadata of {} has no pulse_bindings.gamedata.m_Classes for entity inputs and outputs", module.m_pszModule);
+		return false;
+	}
+
+	int inputs = 0;
+	int outputs = 0;
+
+	for (const auto& [key, binding] : metadata[bindingsPointer].items())
+	{
+		auto metaIt = binding.find("m_MetaData");
+		if (metaIt == binding.end() || !metaIt->is_object())
+			continue;
+
+		const auto& meta = *metaIt;
+		const bool isInput = meta.value("is_pulse_target_method", false);
+		if (!isInput && !meta.value("is_pulse_target_output", false))
+			continue;
+
+		// Inputs take in parameters and can return out parameters, outputs pass out parameters
+		const auto targetArg = meta.value("target_arg_name", std::string());
+		const auto paramsKey = isInput ? "pulse_inparams" : "pulse_outparams";
+		const auto targetType = meta.value(nlohmann::ordered_json::json_pointer(fmt::format("/{}/{}/type", paramsKey, targetArg)), std::string());
+
+		// Other APIs, like CTakeDamageResultAPI, target an opaque handle and are not on entities
+		if (!IsPulseType(targetType, "PVAL_EHANDLE"))
+			continue;
+
+		auto subtype = targetType.find(':');
+		auto designName = subtype == std::string::npos ? rootName : targetType.substr(subtype + 1);
+
+		auto entity = classes.find(designName);
+		if (entity == classes.end())
+		{
+			spdlog::warn("Entity {} of {} {} is not in the entity class list of {}", designName, isInput ? "input" : "output", key, module.m_pszModule);
+			continue;
+		}
+
+		auto name = key.substr(key.rfind(':') + 1);
+		auto params = GetPulseParams(meta, paramsKey, targetArg);
+
+		// Inputs with several parameters can only be called from Pulse
+		const bool isApi = params.size() > 1;
+		const char* fgdType = params.empty() ? "void" : isApi ? "api"
+		                                                      : GetPulseFGDType(params[0].substr(0, params[0].find(' ')));
+		auto line = fmt::format("\t{} {}({})", isInput ? "input" : "output", name, fgdType);
+
+		auto comments = params;
+
+		// Some inputs are Pulse functions that return values
+		if (isInput)
+		{
+			if (auto returned = GetPulseParams(meta, "pulse_outparams", targetArg); !returned.empty())
+				comments.push_back(fmt::format("returns {}", fmt::join(returned, ", ")));
+
+			// Most inputs are hidden in the Pulse editor, the rest are also Pulse nodes
+			if (!meta.value("hidden_in_tool", false))
+				comments.push_back("Pulse node");
+		}
+
+		auto comment = fmt::format("{}", fmt::join(comments, ", "));
+
+		// FGD strings are one line without quotes, and api inputs and outputs can't have a description
+		auto description = binding.value("m_Description", std::string());
+		std::replace(description.begin(), description.end(), '"', '\'');
+		std::replace(description.begin(), description.end(), '\n', ' ');
+		if (!description.empty())
+		{
+			if (isApi)
+				comment += ": " + description;
+			else
+				line += fmt::format(" : \"{}\"", description);
+		}
+
+		if (!comment.empty())
+			line += " // " + comment;
+
+		(isInput ? entity->second.m_Inputs : entity->second.m_Outputs).push_back(std::move(line));
+		entity->second.m_Strings.push_back(name);
+		(isInput ? inputs : outputs)++;
+	}
+
+	// Fields in the metadata being renamed would silently lose them
+	if (!inputs || !outputs)
+	{
+		spdlog::critical("Found {} inputs and {} outputs in the module metadata of {}, the Pulse binding format changed", inputs, outputs, module.m_pszModule);
+		return false;
+	}
+
+	spdlog::debug("Found {} entity inputs and {} outputs in {}", inputs, outputs, module.m_pszModule);
+	return true;
 }
 
 // The SDK layout can be outdated while the signature still matches, so check the list before reading it.
@@ -236,14 +532,14 @@ static const char* ValidateEntityClass(const CModule& module, const CEntityClass
 	if (!Modules::IsValidName(classInfo->m_pszCPPClassname))
 		return "class name";
 
-	// Classes without a design name can't be created by name, and are skipped
+	// Classes without a design name can't be created by name
 	auto designName = classInfo->m_pszClassname;
 	if (designName && (!Modules::FindModuleContaining(designName) || (designName[0] && !Modules::IsValidName(designName))))
 		return "design name";
 
 	for (auto base = classInfo->m_pBaseClassInfo; base; base = base->m_pBaseClassInfo)
 	{
-		if (!Modules::FindModuleContaining(base) || (base->m_pszClassname && !Modules::FindModuleContaining(base->m_pszClassname)))
+		if (!Modules::FindModuleContaining(base) || !Modules::IsValidName(base->m_pszCPPClassname) || (base->m_pszClassname && !Modules::FindModuleContaining(base->m_pszClassname)))
 			return "base class info";
 	}
 
@@ -260,31 +556,59 @@ static const char* ValidateEntityClass(const CModule& module, const CEntityClass
 		}
 	}
 
-	if (classInfo->m_pDataDescMap)
-		return ValidateDataMap(classInfo->m_pDataDescMap);
-
 	return nullptr;
 }
 
-// Nearest base class that has a design name, like module metadata does
-static std::string GetBaseDesignName(const CEntityClassInfo* classInfo)
+// Classes without a design name can't be created by name, like CBaseEntity
+static bool HasDesignName(const CEntityClassInfo* classInfo)
 {
-	for (auto base = classInfo->m_pBaseClassInfo; base; base = base->m_pBaseClassInfo)
+	return classInfo->m_pszClassname && classInfo->m_pszClassname[0];
+}
+
+// FGD class name, the C++ class name for classes without a design name
+static std::string GetFGDName(const CEntityClassInfo* classInfo)
+{
+	return HasDesignName(classInfo) ? classInfo->m_pszClassname : classInfo->m_pszCPPClassname;
+}
+
+// Datamaps chain to their base class datamap, deeper means the chain is not what it's expected to be
+static constexpr int g_MaxDataMapDepth = 64;
+
+// Keys the class adds to its nearest base in the FGD, from its datamap chain down to the base's datamap.
+// This includes classes in between that are not entity classes. Returns false if a datamap is invalid.
+static bool AddClassKeyFields(const CEntityClassInfo* classInfo, const CEntityClassInfo* baseInfo, const EnumMap& enums, EntityClass_t& entity)
+{
+	auto baseMap = baseInfo ? baseInfo->m_pDataDescMap : nullptr;
+	int depth = 0;
+
+	for (auto map = classInfo->m_pDataDescMap; map && map != baseMap; map = map->baseMap)
 	{
-		if (base->m_pszClassname && base->m_pszClassname[0])
-			return base->m_pszClassname;
+		auto invalid = ValidateDataMap(map);
+		if (!invalid && ++depth > g_MaxDataMapDepth)
+			invalid = "datamap chain";
+
+		if (invalid)
+		{
+			spdlog::critical("Entity class {} has an invalid {}, datamap_t in the SDK needs updating", classInfo->m_pszCPPClassname, invalid);
+			return false;
+		}
+
+		if (strcmp(classInfo->m_pszCPPClassname, map->dataClassName))
+			entity.m_Lines.push_back(fmt::format("\t// {}", map->dataClassName));
+
+		if (!AddKeyFields(map, enums, "\t", entity.m_Lines, entity.m_Strings))
+			return false;
 	}
 
-	return {};
+	return true;
 }
 
 // Returns false if the entity class list could not be found or read in a module that has one
 bool Dump()
 {
-	// design name -> module -> class
+	// module -> design name -> class
 	std::map<std::string, std::map<std::string, EntityClass_t>> entities;
 	bool failed = false;
-	int modules = 0;
 
 	for (auto& module : Modules::allModules)
 	{
@@ -310,7 +634,8 @@ bool Dump()
 		}
 
 		auto head = *Modules::GetGlobalFromSignatureMatch<CEntityClass*>(match);
-		modules++;
+		spdlog::debug("Found entity class list in {}, {}", module.m_pszModule, head ? "not empty" : "empty");
+		auto& classes = entities[module.m_pszModule];
 
 		for (auto entityClass = head; entityClass; entityClass = entityClass->m_pNext)
 		{
@@ -321,70 +646,130 @@ bool Dump()
 				break;
 			}
 
-			auto classInfo = entityClass->m_pClassInfo;
-			if (!classInfo->m_pszClassname || !classInfo->m_pszClassname[0])
-				continue;
-
-			EntityClass_t entity{ classInfo->m_pszCPPClassname, GetBaseDesignName(classInfo), GetClassDetails(entityClass) };
+			EntityClass_t entity;
+			entity.m_pClassInfo = entityClass->m_pClassInfo;
+			entity.m_Details = GetClassDetails(entityClass);
 
 			for (auto overrides = entityClass->m_pComponentOverrides; overrides && overrides->pszBaseComponent; overrides++)
 			{
-				entity.m_ComponentOverrides.push_back(fmt::format("\t\tcomponent {}: {}", overrides->pszBaseComponent, overrides->pszOverrideComponent));
+				entity.m_Lines.push_back(fmt::format("\t// component {}: {}", overrides->pszBaseComponent, overrides->pszOverrideComponent));
 				entity.m_Strings.push_back(overrides->pszOverrideComponent);
 			}
 
-			// Classes without their own datadesc point to their base class datamap
-			auto map = classInfo->m_pDataDescMap;
-			if (map && entity.m_CPPClassName == map->dataClassName)
-				AddKeyFields(map, "\t\t", entity.m_KeyFields, entity.m_Strings);
-
-			entities[classInfo->m_pszClassname][module.m_pszModule] = std::move(entity);
+			classes[GetFGDName(entity.m_pClassInfo)] = std::move(entity);
 		}
+
+		// Some modules, like engine2, link the entity system without any entity classes
+		if (failed || classes.empty())
+		{
+			entities.erase(module.m_pszModule);
+			continue;
+		}
+
+		// Enums of keys are in the module's schema scope
+		EnumMap enums;
+		if (!GetModuleEnums(module, enums))
+		{
+			failed = true;
+			continue;
+		}
+
+		// The nearest base in the list, and the keys added since it. The hierarchy root gets the inputs and outputs of any entity.
+		std::string rootName;
+		for (auto& [name, entity] : classes)
+		{
+			auto base = entity.m_pClassInfo->m_pBaseClassInfo;
+			while (base && !classes.contains(GetFGDName(base)))
+				base = base->m_pBaseClassInfo;
+
+			if (base)
+				entity.m_BaseName = GetFGDName(base);
+			else
+				rootName = name;
+
+			if (!AddClassKeyFields(entity.m_pClassInfo, base, enums, entity))
+			{
+				failed = true;
+				break;
+			}
+		}
+
+		if (!failed && !AddInputsAndOutputs(module, rootName, classes))
+			failed = true;
 	}
 
 	if (failed)
 	{
-		spdlog::critical("Not writing entities.txt because the entity class list could not be read, see above");
+		spdlog::critical("Not writing entities, see above");
 		return false;
 	}
 
 	if (entities.empty())
 	{
-		spdlog::info("No entity class lists found, not writing entities.txt");
+		spdlog::info("No entity class lists found, not writing entities");
 		return true;
 	}
 
-	std::ofstream output(Globals::outputPath / "entities.txt");
-
-	for (const auto& [designName, classes] : entities)
+	const auto outputPath = Globals::outputPath / "entities";
+	if (!std::filesystem::is_directory(outputPath) && !std::filesystem::create_directory(outputPath))
 	{
-		output << designName << "\n";
-		Globals::stringsIgnoreStream << designName << "\n";
+		spdlog::critical("Failed to create {}", outputPath.generic_string());
+		return false;
+	}
 
-		for (const auto& [module, entityClass] : classes)
-		{
-			output << "\t" << module << ": " << entityClass.m_CPPClassName;
+	size_t count = 0;
 
-			if (!entityClass.m_BaseDesignName.empty())
-				output << ", base " << entityClass.m_BaseDesignName;
+	// One FGD per module, the client and server classes of an entity differ
+	for (auto& [module, classes] : entities)
+	{
+		std::ofstream output(outputPath / (module + ".fgd"));
+		output << "// Dumped by https://github.com/ValveResourceFormat/DumpSource2\n\n";
 
-			output << entityClass.m_Details << "\n";
-			Globals::stringsIgnoreStream << entityClass.m_CPPClassName << "\n";
+		std::unordered_set<std::string> written;
 
-			for (const auto& line : entityClass.m_ComponentOverrides)
-				output << line << "\n";
+		// FGD base classes have to be defined before the classes that use them
+		std::function<void(const std::string&)> writeClass = [&](const std::string& designName) {
+			if (!written.insert(designName).second)
+				return;
 
-			for (const auto& line : entityClass.m_KeyFields)
-				output << line << "\n";
+			auto& entityClass = classes.at(designName);
+			if (!entityClass.m_BaseName.empty())
+				writeClass(entityClass.m_BaseName);
+
+			auto classInfo = entityClass.m_pClassInfo;
+			output << "// " << classInfo->m_pszCPPClassname << entityClass.m_Details << "\n";
+			output << (HasDesignName(classInfo) && !(classInfo->m_nFlags & ECIF_NOT_SPAWNABLE) ? "@PointClass" : "@BaseClass");
+
+			if (!entityClass.m_BaseName.empty())
+				output << " base(" << entityClass.m_BaseName << ")";
+
+			output << " = " << designName << "\n[\n";
+
+			std::sort(entityClass.m_Inputs.begin(), entityClass.m_Inputs.end());
+			std::sort(entityClass.m_Outputs.begin(), entityClass.m_Outputs.end());
+
+			for (const auto* lines : { &entityClass.m_Lines, &entityClass.m_Inputs, &entityClass.m_Outputs })
+			{
+				for (const auto& line : *lines)
+					output << line << "\n";
+			}
+
+			output << "]\n\n";
+
+			Globals::stringsIgnoreStream << designName << "\n"
+										 << classInfo->m_pszCPPClassname << "\n";
 
 			for (const auto& str : entityClass.m_Strings)
 				Globals::stringsIgnoreStream << str << "\n";
-		}
+		};
 
-		output << "\n";
+		for (const auto& [designName, entityClass] : classes)
+			writeClass(designName);
+
+		count += classes.size();
 	}
 
-	spdlog::info("Wrote {} entities from {} modules to entities.txt", entities.size(), modules);
+	spdlog::info("Wrote {} entity classes from {} modules to entities", count, entities.size());
 	return true;
 }
 

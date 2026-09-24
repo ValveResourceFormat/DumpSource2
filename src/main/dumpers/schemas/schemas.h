@@ -22,6 +22,8 @@
 #include <optional>
 #include "schemasystem/schematypes.h"
 
+class CSchemaSystemTypeScope;
+
 namespace Dumpers::Schemas
 {
 
@@ -73,5 +75,11 @@ struct IntermediateSchemaEnum
 };
 
 bool Dump();
+
+// Every module type scope, and the global type scope last
+std::vector<CSchemaSystemTypeScope*> GetTypeScopes();
+
+// Returns what is invalid in the enum, or null
+const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo);
 
 } // namespace Dumpers::Schemas
