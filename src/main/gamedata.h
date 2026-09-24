@@ -147,37 +147,7 @@ inline constexpr size_t g_CreateInterfaceListOffset = 0x10;
 //-----------------------------------------------------------------------------
 
 // Convars and commands are queued by each module's statically linked tier1 until ConVar_Register is called,
-// so they can be read right after loading the module.
-// These mirror ConVarRegList and ConCommandRegList from the SDK, which are only defined in tier1/convar.cpp.
-struct ConVarRegList
-{
-	struct Entry_t
-	{
-		ConVarCreation_t m_Info;
-		ConVarRefAbstract* m_pConVar;
-		ConVarData** m_pConVarData;
-	};
-
-	uint32 m_nSize;
-	Entry_t m_Entries[100];
-	ConVarRegList* m_pPrev;
-};
-
-struct ConCommandRegList
-{
-	struct Entry_t
-	{
-		ConCommandCreation_t m_Info;
-		ConCommandRef* m_Command;
-	};
-
-	uint32 m_nSize;
-	Entry_t m_Entries[100];
-	ConCommandRegList* m_pPrev;
-};
-
-static_assert(sizeof(ConVarRegList) == 0x3E90, "List size is part of the Linux g_ConVarQueueSignature");
-static_assert(sizeof(ConCommandRegList) == 0x1910, "List size is part of the Linux g_ConCommandQueueSignature");
+// so they can be read right after loading the module. The lists are ConVarRegList and ConCommandRegList from the SDK.
 
 // Signatures of the list append code, starting at the list head load.
 // To update, find the list allocation (sizeof(ConVarRegList)) in tier0. The code is only linked into modules that declare any.

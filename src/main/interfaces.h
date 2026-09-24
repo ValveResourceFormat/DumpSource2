@@ -18,7 +18,7 @@
  */
 #pragma once
 
-#include <eiface.h>
+#include <icvar.h>
 
 class CSchemaSystem;
 
