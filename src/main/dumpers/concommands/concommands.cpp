@@ -43,9 +43,6 @@ namespace Dumpers::ConCommands
 
 using namespace GameData;
 
-#define FCVAR_MISSING1 (1ull << 30)
-#define FCVAR_MISSING2 (1ull << 31)
-
 std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_LINKED_CONCOMMAND, "linked_concommand" },
 	{ FCVAR_DEVELOPMENTONLY, "developmentonly" },
@@ -65,7 +62,7 @@ std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_PER_USER, "per_user" },
 	{ FCVAR_DEMO, "demo" },
 	{ FCVAR_DONTRECORD, "dontrecord" },
-	{ FCVAR_PERFORMING_CALLBACKS, "performing_Callbacks" },
+	{ FCVAR_PERFORMING_CALLBACKS, "performing_callbacks" },
 	{ FCVAR_RELEASE, "release" },
 	{ FCVAR_MENUBAR_ITEM, "menubar_item" },
 	{ FCVAR_COMMANDLINE_ENFORCED, "commandline_enforced" },
@@ -77,9 +74,10 @@ std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_VCONSOLE_SET_FOCUS, "vconsole_set_focus" },
 	{ FCVAR_CLIENTCMD_CAN_EXECUTE, "clientcmd_can_execute" },
 	{ FCVAR_EXECUTE_PER_TICK, "execute_per_tick" },
-	{ FCVAR_MISSING1, "missing1" },
-	{ FCVAR_MISSING2, "missing2" },
-	{ FCVAR_DEFENSIVE, "defensive" }
+	// Not in every SDK yet
+	{ 1ull << 30, "snapshot_ignored" },
+	{ FCVAR_DEFENSIVE, "defensive" },
+	{ 1ull << 34, "gameinfo_cannot_override" },
 };
 
 void WriteFlags(uint64_t flags, std::ostream& stream)
@@ -90,6 +88,17 @@ void WriteFlags(uint64_t flags, std::ostream& stream)
 		if (flags & value)
 		{
 			stream << (found ? " " : "") << name;
+			found = true;
+			flags &= ~value;
+		}
+	}
+
+	// Flags without a name are written by bit, so they aren't lost
+	for (int bit = 0; bit < 64; bit++)
+	{
+		if (flags & (1ull << bit))
+		{
+			stream << (found ? " " : "") << "flag_" << bit;
 			found = true;
 		}
 	}
