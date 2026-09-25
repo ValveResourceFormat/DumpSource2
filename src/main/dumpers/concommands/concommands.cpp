@@ -565,12 +565,11 @@ static bool WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 		item["name"] = name;
 
 		auto flagNames = GetFlagNames(entry.m_nFlags);
+		auto flags = fmt::format("{}", fmt::join(flagNames, " "));
 
-		// Found names are removed, so the ones left over can be reported
+		// Only in schemas.json. Found names are removed, so the ones left over can be reported
 		if (whitelist.erase(ToLower(name)))
 			flagNames.push_back("workshop_whitelisted");
-
-		auto flags = fmt::format("{}", fmt::join(flagNames, " "));
 
 		if (isConVar)
 		{

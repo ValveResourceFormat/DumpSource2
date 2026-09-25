@@ -18,16 +18,16 @@ Set the `LOGLEVEL` environment variable (like `LOGLEVEL=debug`) for more logging
 
 - `schemas/` - schema classes and enums as headers, per module
 - `schemas.json` - schemas, convars, commands and entities for [SchemaExplorer](https://github.com/ValveResourceFormat/SchemaExplorer)
-- `convars.txt`, `commands.txt` - convars and commands with their flags and help
-- `entities/` - entity classes as FGD, per module (CS2 only)
+- `convars.txt`, `commands.txt` - convars and commands with their flags and help, convars also with their default, range and enum
+- `entities/` - entity classes as FGD, per module (CS2 only, inputs and outputs only on Windows)
 - `interfaces.txt` - interfaces exposed by each module
 - `logging_channels.txt` - logging channels with their defaults
-- `module_metadata/` - metadata of each module as KV3
+- `module_metadata/` - metadata of each module as KV3 (Windows only, modules have none on Linux)
 - `.stringsignore` - names that GameTracking removes from its strings dumps
 
 If anything fails to dump, it exits with code 1 and `schemas.json` is not written.
 
-For CS2, convars and commands that workshop maps can use are flagged when `csgo/pak01_dir/scripts/workshop_cvar_whitelist.txt` is extracted from the game's VPK.
+For CS2, convars and commands that workshop maps can use are flagged in `schemas.json` when `csgo/pak01_dir/scripts/workshop_cvar_whitelist.txt` is extracted from the game's VPK.
 
 
 # Compilation
