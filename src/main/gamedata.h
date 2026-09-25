@@ -23,6 +23,8 @@
 
 #include <icvar.h>
 #include <interfaces/interfaces.h>
+#include <tier1/utlstring.h>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -239,5 +241,62 @@ inline const byte g_EntityClassListSignature[] = "\x48\x8B\x1D\x2A\x2A\x2A\x2A\x
 
 // Modules that always link entities, not finding their list means the signature is outdated
 inline const std::unordered_set<std::string> g_RequiredEntityModules = { "client", "server" };
+
+//-----------------------------------------------------------------------------
+// Network
+//-----------------------------------------------------------------------------
+
+// Networked classes register into a CNetworkSerializerCodeGenDatabase (from the SDK) in these modules.
+// Static initializers queue the registrations in a list, which is walked when the module connects, which the dumper doesn't do.
+inline const std::set<std::string> g_NetworkModules = { "client", "server" };
+
+// Signature of that code, the same in each module: the list walk call, then the database getter call.
+// To update, find the xref to the "couldn't look up codegen info for CEntityClass" string, its function is called right after.
+#ifdef _WIN32
+inline const byte g_NetworkDatabaseSignature[] = "\xE8\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x48\x8B\xC8\x48\x8D";
+#else
+inline const byte g_NetworkDatabaseSignature[] = "\xE8\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x48\x8D\x35\x2A\x2A\x2A\x2A\x48\x89\xC7\xE8";
+#endif
+
+// The list walk loads the list head (mov reg, [rip+displacement]) this far in, after its prologue
+inline constexpr size_t g_NetworkRegistrationListOffset = 10;
+
+// Class registrations get the database first, the other queued registrations need systems that only connecting the
+// module sets up. The call comes after the function prologue, which the compiler sizes per function (6 to 18 bytes).
+// Registrations that aren't recognized are caught when classes refer to classes that are missing, except for classes nothing refers to.
+inline constexpr size_t g_NetworkClassRegistrationGetterCallWithin = 32;
+
+// A queued registration. What follows is how it gets called, which differs per platform.
+struct NetworkRegistration_t
+{
+	NetworkRegistration_t* m_pNext;
+	void (*m_pfnRegister)();
+};
+
+// NetworkRecipientsFilter_t in the SDK has the callback as a function pointer, but it is a pointer to member function,
+// which is 16 bytes with the Itanium ABI (Linux) instead of 8, so the name is after it
+struct NetworkMemberFunctionOwner_t
+{
+};
+
+struct SendProxyRecipientsFilter_t
+{
+	void* m_unk001;
+	void (NetworkMemberFunctionOwner_t::*m_Callback)();
+	CUtlString m_Name;
+};
+
+// CNetworkSerializerFieldInfo::m_NetworkPolymorphic is a byte later than in the SDK
+inline constexpr size_t g_NetworkPolymorphicOffset = 0x10A;
+
+// What a NetworkOverride_t changes of the base class field, by its kind
+inline const std::unordered_map<int, std::string> g_NetworkOverrideKinds = {
+	{ 0, "serializer" },
+	{ 1, "encoder" },
+	{ 2, "changeCallback" },
+	{ 4, "bitCount" },
+	{ 5, "userGroup" },
+	{ 6, "priority" },
+};
 
 } // namespace GameData

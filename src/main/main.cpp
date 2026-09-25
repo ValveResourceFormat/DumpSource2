@@ -30,6 +30,7 @@
 #include "dumpers/logging_channels/logging_channels.h"
 #include "dumpers/schemas/schemas.h"
 #include "dumpers/module_metadata/module_metadata.h"
+#include "dumpers/network/network.h"
 
 #include <fmt/format.h>
 #include <sstream>
@@ -169,6 +170,9 @@ static int Run(int argc, char** argv)
 		exitCode = 1;
 
 	if (!Dumpers::LoggingChannels::Dump())
+		exitCode = 1;
+
+	if (!Dumpers::Network::Dump())
 		exitCode = 1;
 
 	if (!WriteStringsIgnore())
