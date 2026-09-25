@@ -31,13 +31,12 @@
 #include <cctype>
 #include <filesystem>
 #include <set>
-#include <charconv>
-#include <iterator>
 #include <fstream>
 #include <vector>
 #include <map>
 #include <optional>
 #include <string_view>
+#include "format_float.h"
 #include "gamedata.h"
 #include "output.h"
 #include "modules.h"
@@ -107,26 +106,6 @@ static std::vector<std::string> GetFlagNames(uint64_t flags)
 	}
 
 	return names;
-}
-
-// Floats are written as the shortest text that reads back as the same value, like 100.1 or 1000000 rather than 1e+06,
-// with at most 6 decimals for values that aren't exact in binary, like 0.015686275
-template <typename T>
-static std::string FormatFloat(T value)
-{
-	char buffer[512];
-	std::string text(buffer, std::to_chars(buffer, std::end(buffer), value, std::chars_format::fixed).ptr);
-
-	if (auto dot = text.find('.'); dot != std::string::npos && text.size() - dot - 1 > 6)
-	{
-		text = fmt::format("{:.6f}", value);
-		text.erase(text.find_last_not_of('0') + 1);
-
-		if (text.back() == '.')
-			text.pop_back();
-	}
-
-	return text == "-0" ? "0" : text;
 }
 
 template <typename T>
