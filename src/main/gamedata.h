@@ -121,6 +121,12 @@ inline const std::vector<AppSystemInfo_t> g_AppSystems{
 	{ false, "subtools/vprof_subtool", "VConsole_SubTool_001_ShowBudgetTool" },
 };
 
+// Interfaces that app systems get when connecting, which aren't app systems themselves.
+// Client and server keep INetworkMessages for their network class registrations.
+inline const std::vector<AppSystemInfo_t> g_FactoryInterfaces{
+	{ false, "networksystem", "NetworkMessagesVersion001" },
+};
+
 //-----------------------------------------------------------------------------
 // tier0 exports
 //-----------------------------------------------------------------------------
@@ -247,31 +253,16 @@ inline const std::unordered_set<std::string> g_RequiredEntityModules = { "client
 //-----------------------------------------------------------------------------
 
 // Networked classes register into a CNetworkSerializerCodeGenDatabase (from the SDK) in these modules.
-// Static initializers queue the registrations in a list, which is walked when the module connects, which the dumper doesn't do.
+// Static initializers queue the registrations, which run when the game connects the module, which the dumper doesn't do.
 inline const std::set<std::string> g_NetworkModules = { "client", "server" };
 
-// Signature of that code, the same in each module: the list walk call, then the database getter call.
+// Signature of that code, the same in each module: the call that runs the queued registrations, then the database getter call.
 // To update, find the xref to the "couldn't look up codegen info for CEntityClass" string, its function is called right after.
 #ifdef _WIN32
 inline const byte g_NetworkDatabaseSignature[] = "\xE8\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x48\x8B\xC8\x48\x8D";
 #else
 inline const byte g_NetworkDatabaseSignature[] = "\xE8\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x48\x8D\x35\x2A\x2A\x2A\x2A\x48\x89\xC7\xE8";
 #endif
-
-// The list walk loads the list head (mov reg, [rip+displacement]) this far in, after its prologue
-inline constexpr size_t g_NetworkRegistrationListOffset = 10;
-
-// Class registrations get the database first, the other queued registrations need systems that only connecting the
-// module sets up. The call comes after the function prologue, which the compiler sizes per function (6 to 18 bytes).
-// Registrations that aren't recognized are caught when classes refer to classes that are missing, except for classes nothing refers to.
-inline constexpr size_t g_NetworkClassRegistrationGetterCallWithin = 32;
-
-// A queued registration. What follows is how it gets called, which differs per platform.
-struct NetworkRegistration_t
-{
-	NetworkRegistration_t* m_pNext;
-	void (*m_pfnRegister)();
-};
 
 // NetworkRecipientsFilter_t in the SDK has the callback as a function pointer, but it is a pointer to member function,
 // which is 16 bytes with the Itanium ABI (Linux) instead of 8, so the name is after it

@@ -139,7 +139,8 @@ static int Run(int argc, char** argv)
 	if (!WriteStringsIgnore())
 		exitCode = 1;
 
-	if (InitializeSchemas())
+	const bool connected = InitializeSchemas();
+	if (connected)
 	{
 		if (!Dumpers::ConCommands::AddEnumModules())
 			exitCode = 1;
@@ -172,7 +173,8 @@ static int Run(int argc, char** argv)
 	if (!Dumpers::LoggingChannels::Dump())
 		exitCode = 1;
 
-	if (!Dumpers::Network::Dump())
+	// Needs the connected modules
+	if (connected && !Dumpers::Network::Dump())
 		exitCode = 1;
 
 	if (!WriteStringsIgnore())

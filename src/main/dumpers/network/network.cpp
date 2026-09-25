@@ -52,7 +52,6 @@ enum NetChannelBufType_t : int;
 #include <filesystem>
 #include <fstream>
 #include <map>
-#include <set>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -247,7 +246,7 @@ static std::vector<Property_t> GetFieldProperties(const CNetworkSerializerFieldI
 	return properties;
 }
 
-// Runs the class registrations of a module, the other queued registrations need systems that only connecting the module sets up.
+// Runs the queued registrations of a module like it does when it connects.
 // Returns the module's database, or null if the signature or code changed.
 static CNetworkSerializerCodeGenDatabase* RunRegistrations(CModule& module)
 {
@@ -259,35 +258,16 @@ static CNetworkSerializerCodeGenDatabase* RunRegistrations(CModule& module)
 		return nullptr;
 	}
 
-	auto walk = match + 5 + *(int32_t*)(match + 1);
+	auto registerAll = (void (*)(NetworkSerializationMode_t))(match + 5 + *(int32_t*)(match + 1));
 	auto getDatabase = (CNetworkSerializerCodeGenDatabase * (*)())(match + 10 + *(int32_t*)(match + 6));
+
+	// Some registrations need INetworkMessages, which the module got when connecting (see g_FactoryInterfaces)
+	registerAll(strcmp(module.m_pszModule, "client") ? NET_SERIALIZATION_MODE_SERVER : NET_SERIALIZATION_MODE_CLIENT);
+
 	auto database = getDatabase();
-
-	if (!Modules::IsRipRelativeLoad(walk + g_NetworkRegistrationListOffset))
+	if (!database->m_ClassInfos.Count())
 	{
-		spdlog::critical("The network registration list walk in {} changed, update g_NetworkRegistrationListOffset in gamedata.h", module.m_pszModule);
-		return nullptr;
-	}
-
-	int registered = 0;
-	for (auto registration = *Modules::GetGlobalFromSignatureMatch<NetworkRegistration_t*>(walk + g_NetworkRegistrationListOffset); registration; registration = registration->m_pNext)
-	{
-		auto code = (const uint8_t*)registration->m_pfnRegister;
-		for (size_t i = 0; i < g_NetworkClassRegistrationGetterCallWithin; i++)
-		{
-			if (code[i] == 0xE8 && code + i + 5 + *(const int32_t*)(code + i + 1) == (const uint8_t*)getDatabase)
-			{
-				registration->m_pfnRegister();
-				registered++;
-				break;
-			}
-		}
-	}
-
-	// Each registration adds one class
-	if (!registered || database->m_ClassInfos.Count() != (unsigned int)registered)
-	{
-		spdlog::critical("Ran {} network class registrations in {}, but its database has {} classes, the registration check needs updating", registered, module.m_pszModule, database->m_ClassInfos.Count());
+		spdlog::critical("The network database in {} is empty after running its registrations", module.m_pszModule);
 		return nullptr;
 	}
 
@@ -296,11 +276,6 @@ static CNetworkSerializerCodeGenDatabase* RunRegistrations(CModule& module)
 
 static bool ReadClasses(const char* module, const CNetworkSerializerCodeGenDatabase* database, Classes_t& classes)
 {
-	// Classes that others refer to, to check that no registration was missed like the game does when it finishes the database
-	std::set<const CNetworkSerializerClassInfo*> infos;
-	std::vector<std::pair<std::string, const CNetworkSerializerClassInfo*>> parents;
-	std::vector<std::pair<std::string, std::string>> fieldClasses;
-
 	for (auto i = database->m_ClassInfos.First(); i != database->m_ClassInfos.InvalidIndex(); i = database->m_ClassInfos.Next(i))
 	{
 		// The SDK types can go out of date while the code that fills them stays the same, so check what is read
@@ -319,12 +294,6 @@ static bool ReadClasses(const char* module, const CNetworkSerializerCodeGenDatab
 
 		auto& networkClass = classes[name];
 		networkClass.properties = GetClassProperties(info);
-		infos.insert(info);
-
-		// Declared as a vector of values in the SDK, but it holds pointers
-		auto parentInfos = reinterpret_cast<const CNetworkSerializerClassInfo* const*>(info->m_ParentClassInfo.Base());
-		for (int p = 0; p < info->m_ParentClassInfo.Count(); p++)
-			parents.emplace_back(name, parentInfos[p]);
 
 		for (int f = 0; f < info->m_Fields.Count(); f++)
 		{
@@ -339,27 +308,6 @@ static bool ReadClasses(const char* module, const CNetworkSerializerCodeGenDatab
 			auto varType = varTypes.find(fieldName);
 			auto type = varType != varTypes.end() ? varType->second : std::string(field->m_pszTypeName.Get());
 			networkClass.fields.push_back({ fieldName, type, GetFieldProperties(field, type) });
-
-			if (field->m_pszCodeGenType.Get()[0])
-				fieldClasses.emplace_back(fmt::format("{}::{}", name, fieldName), field->m_pszCodeGenType.Get());
-		}
-	}
-
-	for (const auto& [name, parent] : parents)
-	{
-		if (!infos.contains(parent))
-		{
-			spdlog::critical("A base class of network class {} in {} was not registered, update g_NetworkClassRegistrationGetterCallWithin in gamedata.h", name, module);
-			return false;
-		}
-	}
-
-	for (const auto& [field, className] : fieldClasses)
-	{
-		if (!classes.contains(className))
-		{
-			spdlog::critical("Network class {} of {} in {} was not registered, update g_NetworkClassRegistrationGetterCallWithin in gamedata.h", className, field, module);
-			return false;
 		}
 	}
 

@@ -198,6 +198,19 @@ bool InitializeSchemas()
 			fn(SCHEMASYSTEM_INTERFACE_VERSION, Interfaces::schemaSystem);
 	}
 
+	for (const auto& info : g_FactoryInterfaces)
+	{
+		auto module = std::find_if(Modules::allModules.begin(), Modules::allModules.end(), [&](const CModule& m) { return !strcmp(m.m_pszModule, info.moduleName); });
+		auto found = module != Modules::allModules.end() ? TryFindInterface(*module, info.interfaceVersion) : nullptr;
+		if (!found)
+		{
+			spdlog::warn("{} does not expose {}, update g_FactoryInterfaces in gamedata.h", info.moduleName, info.interfaceVersion);
+			continue;
+		}
+
+		g_factoryMap[info.interfaceVersion] = (IAppSystem*)found;
+	}
+
 	std::vector<std::pair<const char*, IAppSystem*>> connectable;
 	for (const auto& appSystem : g_AppSystems)
 	{
