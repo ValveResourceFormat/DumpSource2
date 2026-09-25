@@ -32,12 +32,23 @@
 #include "dumpers/module_metadata/module_metadata.h"
 
 #include <fmt/format.h>
+#include <sstream>
+#include <unordered_set>
 
+// Each name once, dumpers add the same names many times (like field names)
 static bool WriteStringsIgnore()
 {
 	const auto path = Globals::outputPath / ".stringsignore";
 	std::ofstream file(path);
-	file << Globals::stringsIgnoreStream.str();
+	std::istringstream names(Globals::stringsIgnoreStream.str());
+	std::unordered_set<std::string> written;
+
+	for (std::string name; std::getline(names, name);)
+	{
+		if (written.insert(name).second)
+			file << name << "\n";
+	}
+
 	return CloseOutput(file, path);
 }
 
