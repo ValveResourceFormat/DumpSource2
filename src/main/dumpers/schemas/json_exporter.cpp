@@ -114,6 +114,11 @@ static json SerializeType(CSchemaType* type)
 				if (auto count = static_cast<CSchemaType_Atomic_CollectionOfT*>(type)->m_nFixedBufferCount)
 					j["count"] = count;
 			}
+
+			// Schemas do not describe atomic types, but know their size, which depends on template arguments
+			auto* atomic = static_cast<CSchemaType_Atomic*>(type);
+			j["size"] = atomic->m_nSize;
+			j["alignment"] = atomic->m_nAlignment;
 			break;
 		}
 		case SCHEMA_TYPE_DECLARED_CLASS:
