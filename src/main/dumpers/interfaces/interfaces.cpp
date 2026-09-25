@@ -32,12 +32,6 @@
 namespace Dumpers::Interfaces
 {
 
-// The list head load is a RIP relative mov (REX.W 8B with a disp32 operand), anything else means the code changed
-static bool IsRipRelativeLoad(const uint8_t* code)
-{
-	return (code[0] == 0x48 || code[0] == 0x4C) && code[1] == 0x8B && (code[2] & 0xC7) == 0x05;
-}
-
 // Returns false if a module exports CreateInterface but its interface list could not be found
 bool Dump()
 {
@@ -56,7 +50,7 @@ bool Dump()
 
 		// The head and registrations are static objects in the module, so anything else means the code changed.
 		auto load = createInterface + GameData::g_CreateInterfaceListOffset;
-		auto head = IsRipRelativeLoad(load) ? Modules::GetGlobalFromSignatureMatch<InterfaceReg*>(load) : nullptr;
+		auto head = Modules::IsRipRelativeLoad(load) ? Modules::GetGlobalFromSignatureMatch<InterfaceReg*>(load) : nullptr;
 		auto regs = head && Modules::IsInModule(*module, head) ? *head : nullptr;
 		bool valid = regs != nullptr;
 		std::set<std::string> names;

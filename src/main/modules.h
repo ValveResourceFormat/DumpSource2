@@ -38,6 +38,12 @@ T* GetGlobalFromSignatureMatch(const void* match)
 	return (T*)(instruction + 7 + *(const int32_t*)(instruction + 3));
 }
 
+// A RIP relative mov (REX.W 8B with a disp32 operand), which is what GetGlobalFromSignatureMatch reads
+inline bool IsRipRelativeLoad(const uint8_t* code)
+{
+	return (code[0] == 0x48 || code[0] == 0x4C) && code[1] == 0x8B && (code[2] & 0xC7) == 0x05;
+}
+
 // Game structs are read without knowing if their layout still matches, these check that pointers read from them
 // point into a loaded module (where names and registration objects are), so a changed layout fails instead of crashing.
 // On Linux CModule only covers the code segment, so this only checks for null there.
