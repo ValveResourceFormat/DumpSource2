@@ -26,4 +26,7 @@ namespace Dumpers::ConCommands
 void CollectQueues(CModule& module);
 bool Dump();
 
+// Adds the modules of enum convar enums to schemas.json, which are only known once schema bindings are installed
+bool AddEnumModules();
+
 } // namespace Dumpers::ConCommands

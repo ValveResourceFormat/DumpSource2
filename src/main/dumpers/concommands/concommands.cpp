@@ -23,6 +23,7 @@
 #include <icvar.h>
 #undef private
 #undef _ALLOW_KEYWORD_MACROS
+#include <schemasystem/schematypes.h>
 
 #include "concommands.h"
 #include "globalvariables.h"
@@ -198,7 +199,7 @@ static ConVarValue_t FormatValue(EConVarType type, const CVValue_t* value)
 	}
 }
 
-static void WriteValueLine(const std::string& value, const std::optional<std::string>& minValue, const std::optional<std::string>& maxValue, const std::string& flags, std::ostream& stream)
+static void WriteValueLine(const std::string& value, const std::optional<std::string>& minValue, const std::optional<std::string>& maxValue, const char* enumName, const std::string& flags, std::ostream& stream)
 {
 	stream << " " << value << " (";
 
@@ -210,6 +211,9 @@ static void WriteValueLine(const std::string& value, const std::optional<std::st
 
 	if (minValue || maxValue)
 		stream << ", ";
+
+	if (enumName)
+		stream << "enum: " << enumName << ", ";
 
 	stream << flags << ")";
 }
@@ -270,6 +274,8 @@ struct QueuedEntry_t
 	std::optional<std::string> m_Default;
 	std::optional<std::string> m_Min;
 	std::optional<std::string> m_Max;
+	// Static data in the declaring module, its module name is only set once schema bindings are installed
+	const SchemaEnumInfoData_t* m_pEnum = nullptr;
 };
 
 struct Queue_t
@@ -284,6 +290,23 @@ struct Queue_t
 static Queue_t g_ConVarQueue{ "convar", "ConVarRegList", "convars.txt" };
 static Queue_t g_ConCommandQueue{ "concommand", "ConCommandRegList", "commands.txt" };
 static std::set<std::string> g_CollectedModules;
+static std::map<std::string, const SchemaEnumInfoData_t*> g_EnumConVars;
+
+// The custom data of enum_value convars is their schema enum, returned wrapped in a struct rather than as the void* of
+// FnCustomData_t in the SDK. The constructor makes MSVC return it through memory like the game does, gcc and clang in a register.
+struct CustomDataEnum_t
+{
+	CustomDataEnum_t() {}
+	const SchemaEnumInfoData_t* m_pEnum;
+};
+
+static const SchemaEnumInfoData_t* GetEnum(const ConVarValueInfo_t& info)
+{
+	if (!info.m_fnCustomData)
+		return nullptr;
+
+	return reinterpret_cast<CustomDataEnum_t (*)()>(info.m_fnCustomData)().m_pEnum;
+}
 
 static QueuedEntry_t CopyQueued(const char* module, const ConVarRegList::Entry_t& queued)
 {
@@ -298,6 +321,7 @@ static QueuedEntry_t CopyQueued(const char* module, const ConVarRegList::Entry_t
 	if (info.m_bHasMax)
 		entry.m_Max = FormatValue(info.m_eVarType, (const CVValue_t*)info.m_maxValue).m_Text;
 
+	entry.m_pEnum = GetEnum(info);
 	return entry;
 }
 
@@ -325,6 +349,16 @@ static const char* ValidateQueued(const ConVarRegList::Entry_t& queued)
 	{
 		if (*(const uint8*)flag > 1)
 			return "has value flags";
+	}
+
+	if (info.m_fnCustomData)
+	{
+		if (!Modules::FindModuleContaining((const void*)info.m_fnCustomData))
+			return "custom data function";
+
+		auto enumInfo = GetEnum(info);
+		if (!Modules::FindModuleContaining(enumInfo) || !Modules::IsValidName(enumInfo->m_pszName))
+			return "custom data enum";
 	}
 
 	return nullptr;
@@ -463,6 +497,8 @@ static QueuedEntry_t MergeQueued(const std::vector<QueuedEntry_t*>& entries, std
 			merged->m_Min = entry->m_Min;
 		if (!merged->m_Max)
 			merged->m_Max = entry->m_Max;
+		if (!merged->m_pEnum)
+			merged->m_pEnum = entry->m_pEnum;
 		if (merged->m_Help.empty())
 			merged->m_Help = entry->m_Help;
 	}
@@ -553,9 +589,14 @@ static bool WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 				maxValue = entry.m_Max;
 			}
 
-			WriteValueLine(entry.m_eType == EConVarType_String ? "\"" + value.m_Text + "\"" : value.m_Text, minValue, maxValue, flags, output);
+			WriteValueLine(entry.m_eType == EConVarType_String ? "\"" + value.m_Text + "\"" : value.m_Text, minValue, maxValue, entry.m_pEnum ? entry.m_pEnum->m_pszName : nullptr, flags, output);
 
 			item["type"] = value.m_pszType;
+			if (entry.m_pEnum)
+			{
+				item["enum"] = entry.m_pEnum->m_pszName;
+				g_EnumConVars[name] = entry.m_pEnum;
+			}
 			if (hasDefault)
 				item["default"] = value.m_Text;
 			if (minValue)
@@ -629,6 +670,30 @@ bool Dump()
 		spdlog::info("{} workshop whitelisted names are not convars or commands: {}", whitelist.size(), fmt::join(whitelist, ", "));
 
 	return success;
+}
+
+bool AddEnumModules()
+{
+	if (!Globals::schemasJson.contains("convars"))
+		return true;
+
+	for (auto& item : Globals::schemasJson["convars"])
+	{
+		auto it = g_EnumConVars.find(item["name"]);
+		if (it == g_EnumConVars.end())
+			continue;
+
+		auto project = it->second->m_pszProjectName;
+		if (!Modules::IsValidName(project))
+		{
+			spdlog::critical("Enum {} of convar {} has no module after installing schema bindings, SchemaEnumInfoData_t in the SDK needs updating", it->second->m_pszName, it->first);
+			return false;
+		}
+
+		item["enumModule"] = project;
+	}
+
+	return true;
 }
 
 } // namespace Dumpers::ConCommands

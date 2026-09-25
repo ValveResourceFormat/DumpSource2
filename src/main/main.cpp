@@ -129,6 +129,9 @@ static int Run(int argc, char** argv)
 
 	if (InitializeSchemas())
 	{
+		if (!Dumpers::ConCommands::AddEnumModules())
+			exitCode = 1;
+
 		if (!Dumpers::Schemas::Dump())
 		{
 			spdlog::critical("Not writing schemas, see above");
