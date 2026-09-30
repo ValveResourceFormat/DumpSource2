@@ -27,6 +27,9 @@
 #include <algorithm>
 #include <spdlog/spdlog.h>
 #include "metadata_stringifier.h"
+#include "format_float.h"
+#include "dumpers/module_metadata/module_metadata.h"
+#include <string_view>
 
 namespace Dumpers::Schemas::FilesystemExporter
 {
@@ -47,8 +50,9 @@ static std::string CommentBlock(std::string str)
 
 static void OutputMetadataEntry(const IntermediateMetadata& entry, std::ofstream& output, bool tabulate)
 {
-	// KV3 defaults are only written to schemas.json
-	if(entry.name == "MGetKV3ClassDefaults") return;
+	// KV3 defaults are written as comments after the fields
+	if (entry.name == "MGetKV3ClassDefaults")
+		return;
 
 	output << (tabulate ? "\t" : "") << "// " << entry.name;
 
@@ -66,6 +70,87 @@ static void OutputMetadataEntry(const IntermediateMetadata& entry, std::ofstream
 	}
 
 	output << "\n";
+}
+
+// Writes a KV3 default on one line, with floats like FormatFloat and NaN or infinity unquoted
+static void WriteDefault(const nlohmann::json& value, std::string& out)
+{
+	if (value.is_number_float())
+	{
+		out += FormatFloat(value.get<double>());
+	}
+	else if (value.is_string() && ModuleMetadata::IsNonFiniteFloat(value.get_ref<const std::string&>()))
+	{
+		out += value.get_ref<const std::string&>();
+	}
+	else if (value.is_structured())
+	{
+		out += value.is_object() ? "{ " : "[ ";
+
+		for (auto it = value.begin(); it != value.end(); ++it)
+		{
+			if (it != value.begin())
+				out += ", ";
+
+			if (value.is_object())
+				out += nlohmann::json(it.key()).dump() + ": ";
+
+			WriteDefault(*it, out);
+		}
+
+		out += value.is_object() ? " }" : " ]";
+	}
+	else
+	{
+		out += value.dump();
+	}
+}
+
+// Zero, false, empty, null, or a container of only those
+static bool IsZeroDefault(const nlohmann::json& value)
+{
+	if (value.is_structured())
+		return std::all_of(value.begin(), value.end(), [](const nlohmann::json& item) { return IsZeroDefault(item); });
+
+	if (value.is_number())
+		return value.get<double>() == 0.0;
+
+	if (value.is_boolean())
+		return !value.get<bool>();
+
+	if (value.is_string())
+		return value.get_ref<const std::string&>().empty();
+
+	return value.is_null();
+}
+
+static const nlohmann::json* FindMetadataValue(const std::vector<IntermediateMetadata>& metadata, std::string_view name)
+{
+	for (const auto& entry : metadata)
+	{
+		if (entry.name == name)
+			return entry.jsonValue ? &*entry.jsonValue : nullptr;
+	}
+
+	return nullptr;
+}
+
+// Defaults are keyed by the KV3 transfer name when a field has one
+static const nlohmann::json* FindFieldDefault(const nlohmann::json& defaults, const IntermediateSchemaClassField& field)
+{
+	for (const auto& entry : field.metadata)
+	{
+		if (entry.name == "MKV3TransferName" && entry.stringValue && entry.stringValue->size() >= 2)
+		{
+			// String metadata is written quoted
+			auto it = defaults.find(entry.stringValue->substr(1, entry.stringValue->size() - 2));
+			if (it != defaults.end())
+				return &*it;
+		}
+	}
+
+	auto it = defaults.find(field.name);
+	return it != defaults.end() ? &*it : nullptr;
 }
 
 // The file for a class or enum, recorded so outdated files can be removed
@@ -114,6 +199,11 @@ static bool DumpClasses(const std::vector<IntermediateSchemaClass>& classes, con
 
 		output << "\n{\n";
 
+		// KV3 defaults are written after the fields they belong to rather than as one block before the class
+		auto defaults = FindMetadataValue(intermediateClass.metadata, "MGetKV3ClassDefaults");
+		if (defaults && !defaults->is_object())
+			defaults = nullptr;
+
 		for (const auto& field : intermediateClass.fields)
 		{
 			// Output metadata entries as comments before the field definition
@@ -122,7 +212,17 @@ static bool DumpClasses(const std::vector<IntermediateSchemaClass>& classes, con
 				OutputMetadataEntry(metadata, output, true);
 			}
 
-			output << "\t" << field.type->m_sTypeName.String() << " " << field.name << ";\n";
+			output << "\t" << field.type->m_sTypeName.String() << " " << field.name << ";";
+
+			auto value = defaults ? FindFieldDefault(*defaults, field) : nullptr;
+			if (value && !IsZeroDefault(*value))
+			{
+				std::string text;
+				WriteDefault(*value, text);
+				output << " // = " << text;
+			}
+
+			output << "\n";
 			Globals::stringsIgnoreStream << field.name << "\n";
 		}
 
