@@ -47,6 +47,9 @@ static std::string CommentBlock(std::string str)
 
 static void OutputMetadataEntry(const IntermediateMetadata& entry, std::ofstream& output, bool tabulate)
 {
+	// KV3 defaults are only written to schemas.json
+	if(entry.name == "MGetKV3ClassDefaults") return;
+
 	output << (tabulate ? "\t" : "") << "// " << entry.name;
 
 	if (entry.hasValue)

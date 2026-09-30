@@ -50,7 +50,7 @@ namespace Dumpers::Entities
 {
 
 // Other games don't have this entity system yet, and their SDKs have the older entity and datamap layouts
-#ifdef GAME_CS2
+#ifndef GAME_DOTA
 
 using namespace GameData;
 
