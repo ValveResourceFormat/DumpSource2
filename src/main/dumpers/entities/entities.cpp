@@ -230,12 +230,18 @@ struct ModuleSchemas_t
 {
 	std::unordered_map<std::string, const SchemaEnumInfoData_t*> m_Enums;
 	std::unordered_map<std::string, const SchemaClassInfoData_t*> m_Classes;
+
+	// Datamaps of the schema classes in every scope, which can be in any module
+	std::vector<const datamap_t*> m_DataMaps;
+
+	// Datamaps whose keys are in the FGD, filled while adding them
+	std::unordered_set<const datamap_t*> m_WrittenDataMaps;
 };
 
 // The class keys are added to, and the component they are on with the datamaps it already has
 struct KeyTarget_t
 {
-	const ModuleSchemas_t& m_Schemas;
+	ModuleSchemas_t& m_Schemas;
 	EntityClass_t& m_Entity;
 	const char* m_pszComponent = nullptr;
 	std::unordered_set<const datamap_t*>* m_pComponentDataMaps = nullptr;
@@ -274,6 +280,8 @@ static bool GetModuleSchemas(const CModule& module, ModuleSchemas_t& schemas)
 		return std::make_tuple(moduleScopeName != a->m_szScopeName, std::string_view(a->m_szScopeName)) < std::make_tuple(moduleScopeName != b->m_szScopeName, std::string_view(b->m_szScopeName));
 	});
 
+	std::unordered_set<const datamap_t*> dataMaps;
+
 	for (auto typeScope : scopes)
 	{
 		FOR_EACH_MAP(typeScope->m_DeclaredEnums.m_Map, iter)
@@ -296,8 +304,14 @@ static bool GetModuleSchemas(const CModule& module, ModuleSchemas_t& schemas)
 		// Validated by the schemas dumper
 		FOR_EACH_MAP(typeScope->m_DeclaredClasses.m_Map, iter)
 		{
-			if (const auto classInfo = typeScope->m_DeclaredClasses.m_Map.Element(iter)->m_pClassInfo)
-				schemas.m_Classes.try_emplace(classInfo->m_pszName, classInfo);
+			const auto classInfo = typeScope->m_DeclaredClasses.m_Map.Element(iter)->m_pClassInfo;
+			if (!classInfo)
+				continue;
+
+			schemas.m_Classes.try_emplace(classInfo->m_pszName, classInfo);
+
+			if (classInfo->m_pDataDescMap && dataMaps.insert(classInfo->m_pDataDescMap).second)
+				schemas.m_DataMaps.push_back(classInfo->m_pDataDescMap);
 		}
 	}
 
@@ -508,6 +522,7 @@ static bool AddDataMapKeys(const datamap_t* map, const char* ownerName, KeyTarge
 		}
 
 		dataMaps.insert(map);
+		target.m_Schemas.m_WrittenDataMaps.insert(map);
 
 		std::vector<std::string> keys;
 		if (!AddKeyFields(map, target, indent, path, keys))
@@ -813,7 +828,7 @@ static const datamap_t* GetComponentDataMap(const ModuleSchemas_t& schemas, cons
 // Components the class adds and the ones it overrides, under a comment with the keys they add.
 // The classes add their own components, and overrides replace a base's component with a subclass of it, which adds keys to the base's.
 // Returns false if the components or a datamap are invalid.
-static bool AddComponentKeys(const CEntityClass* entityClass, const ModuleSchemas_t& schemas, EntityClass_t& entity)
+static bool AddComponentKeys(const CEntityClass* entityClass, ModuleSchemas_t& schemas, EntityClass_t& entity)
 {
 	// The base component is the one it overrides, or itself, which overrides share the written datamaps of
 	auto addComponent = [&](const std::string& comment, const char* name, const char* baseName) {
@@ -866,13 +881,92 @@ static bool AddComponentKeys(const CEntityClass* entityClass, const ModuleSchema
 
 // Keys the class adds to its nearest base in the FGD: its components, and its datamap chain down to the base's datamap.
 // The chain includes classes in between that are not entity classes. Returns false if a datamap is invalid.
-static bool AddClassKeys(const CEntityClass* entityClass, const ModuleSchemas_t& schemas, EntityClass_t& entity)
+static bool AddClassKeys(const CEntityClass* entityClass, ModuleSchemas_t& schemas, EntityClass_t& entity)
 {
 	if (!AddComponentKeys(entityClass, schemas, entity))
 		return false;
 
 	KeyTarget_t target{ schemas, entity };
 	return AddDataMapKeys(entityClass->m_pClassInfo->m_pDataDescMap, entityClass->m_pClassInfo->m_pszCPPClassname, target, entity.m_DataMaps, "\t", "", entity.m_Lines);
+}
+
+// Datamaps in the module that no entity class has, like modifiers and structs only code fills, as FGD base classes nothing uses.
+// A base datamap that has its own block is the FGD base, like for the entity classes. Returns false if a datamap is invalid.
+static bool GetUnusedDataMapLines(const CModule& module, ModuleSchemas_t& schemas, std::vector<std::string>& lines)
+{
+	std::vector<const datamap_t*> unused;
+	for (auto map : schemas.m_DataMaps)
+	{
+		if (Modules::IsInModule(module, map) && !schemas.m_WrittenDataMaps.contains(map))
+			unused.push_back(map);
+	}
+
+	// Only those that have keys of their own get a block
+	std::unordered_set<const datamap_t*> withKeys;
+	for (auto map : unused)
+	{
+		if (auto invalid = ValidateDataMap(map))
+		{
+			spdlog::critical("Schema class datamap in {} has an invalid {}, datamap_t in the SDK needs updating", module.m_pszModule, invalid);
+			return false;
+		}
+
+		EntityClass_t entity;
+		KeyTarget_t target{ schemas, entity };
+		std::vector<std::string> keys;
+		if (!AddKeyFields(map, target, "\t", "", keys))
+			return false;
+
+		if (!keys.empty())
+			withKeys.insert(map);
+	}
+
+	std::sort(unused.begin(), unused.end(), [](auto a, auto b) { return strcmp(a->dataClassName, b->dataClassName) < 0; });
+
+	// FGD base classes have to be defined before the classes that use them
+	std::unordered_set<const datamap_t*> written;
+	std::function<bool(const datamap_t*)> writeBlock = [&](const datamap_t* map) {
+		if (!written.insert(map).second)
+			return true;
+
+		auto base = map->baseMap;
+		for (int depth = 0; base && Modules::FindModuleContaining(base) && !withKeys.contains(base) && depth < g_MaxDataMapDepth; depth++)
+			base = base->baseMap;
+
+		const auto baseBlock = base && withKeys.contains(base) ? base : nullptr;
+		if (baseBlock && !writeBlock(baseBlock))
+			return false;
+
+		// Keys down to the base's block
+		EntityClass_t entity;
+		if (baseBlock)
+			entity.m_DataMaps.insert(baseBlock);
+
+		KeyTarget_t target{ schemas, entity };
+		std::vector<std::string> keys;
+		if (!AddDataMapKeys(map, map->dataClassName, target, entity.m_DataMaps, "\t", "", keys))
+			return false;
+
+		lines.push_back(fmt::format("@BaseClass{} = {}", baseBlock ? fmt::format(" base({})", baseBlock->dataClassName) : "", map->dataClassName));
+		lines.push_back("[");
+		lines.insert(lines.end(), keys.begin(), keys.end());
+		lines.push_back("]");
+		lines.push_back("");
+
+		Globals::stringsIgnoreStream << map->dataClassName << "\n";
+		for (const auto& str : entity.m_Strings)
+			Globals::stringsIgnoreStream << str << "\n";
+
+		return true;
+	};
+
+	for (auto map : unused)
+	{
+		if (withKeys.contains(map) && !writeBlock(map))
+			return false;
+	}
+
+	return true;
 }
 
 // Inputs or outputs for schemas.json, moved out of the list
@@ -944,6 +1038,7 @@ bool Dump()
 {
 	// module -> design name -> class
 	std::map<std::string, std::map<std::string, EntityClass_t>> entities;
+	std::map<std::string, std::vector<std::string>> unusedDataMaps;
 	bool failed = false;
 
 	for (auto& module : Modules::allModules)
@@ -1058,7 +1153,7 @@ bool Dump()
 		for (auto it = classes.begin(); !moduleFailed && it != classes.end(); ++it)
 			moduleFailed = !addKeys(it->second);
 
-		if (moduleFailed || !AddInputsAndOutputs(module, rootName, schemas, classes))
+		if (moduleFailed || !AddInputsAndOutputs(module, rootName, schemas, classes) || !GetUnusedDataMapLines(module, schemas, unusedDataMaps[module.m_pszModule]))
 		{
 			failed = true;
 			continue;
@@ -1141,6 +1236,14 @@ bool Dump()
 
 		for (const auto& [designName, entityClass] : classes)
 			writeClass(designName);
+
+		if (const auto& unused = unusedDataMaps[module]; !unused.empty())
+		{
+			output << "// Datamaps that no entity class has, like modifiers and structs that only code fills\n\n";
+
+			for (const auto& line : unused)
+				output << line << "\n";
+		}
 
 		if (!CloseOutput(output, path))
 			return false;

@@ -19,7 +19,7 @@ Set the `LOGLEVEL` environment variable (like `LOGLEVEL=debug`) for more logging
 - `schemas/` - schema classes and enums as headers, per module
 - `schemas.json` - schemas, convars, commands and entities for [SchemaExplorer](https://github.com/ValveResourceFormat/SchemaExplorer)
 - `convars.txt`, `commands.txt` - convars and commands with their flags and help, convars also with their default, range and enum
-- `entities/` - entity classes as FGD, per module (CS2 only, inputs and outputs only on Windows)
+- `entities/` - entity classes as FGD with their keys, components, inputs and outputs, per module, and datamaps no entity class has as unused base classes (CS2 and Deadlock, inputs and outputs only on Windows)
 - `interfaces.txt` - interfaces exposed by each module
 - `logging_channels.txt` - logging channels with their defaults
 - `module_metadata/` - metadata of each module as KV3 (Windows only, modules have none on Linux)
