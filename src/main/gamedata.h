@@ -125,10 +125,8 @@ inline const std::vector<AppSystemInfo_t> g_AppSystems{
 
 #ifdef _WIN32
 inline constexpr const char* g_SaveKV3AsJSONSymbol = "?SaveKV3AsJSON@@YA_NPEBVKeyValues3@@PEAVCUtlString@@1@Z";
-inline constexpr const char* g_SaveKV3TextToStringSymbol = "?SaveKV3Text_ToString@@YA_NAEBUKV3ID_t@@PEBVKeyValues3@@PEAVCUtlString@@2I@Z";
 #else
 inline constexpr const char* g_SaveKV3AsJSONSymbol = "_Z13SaveKV3AsJSONPK10KeyValues3P10CUtlStringS3_";
-inline constexpr const char* g_SaveKV3TextToStringSymbol = "_Z20SaveKV3Text_ToStringRK7KV3ID_tPK10KeyValues3P10CUtlStringS6_j";
 #endif
 
 //-----------------------------------------------------------------------------

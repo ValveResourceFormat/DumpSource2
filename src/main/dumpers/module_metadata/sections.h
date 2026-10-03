@@ -18,25 +18,15 @@
  */
 #pragma once
 
-#include <string_view>
+#include <map>
+#include <string>
 #include <nlohmann/json.hpp>
-
-class CModule;
 
 namespace Dumpers::ModuleMetadata
 {
 
-// Returns false if any module's metadata could not be read or written
-bool Dump();
-
-// The module's metadata converted to JSON, null if the module has none, discarded if it could not be read. Read once per module.
-const nlohmann::ordered_json& GetJSON(const CModule& module);
-
-// Converts KV3 to JSON with tier0's SaveKV3AsJSON, discarded if it fails.
-// NaN and infinity are strings like "-nan", which JSON has no value for.
-nlohmann::ordered_json KV3ToJSON(void* kv3);
-
-// Whether a string from KV3ToJSON is a float that is NaN or infinity
-bool IsNonFiniteFloat(std::string_view text);
+// Writes the sections of a module's metadata as text, by file name. Keys that no section writer knows are moved to unhandled.
+// Returns false if a section is not what its writer expects.
+bool WriteSections(const char* moduleName, nlohmann::ordered_json metadata, std::map<std::string, std::string>& files, nlohmann::ordered_json& unhandled);
 
 } // namespace Dumpers::ModuleMetadata

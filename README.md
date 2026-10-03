@@ -22,7 +22,7 @@ Set the `LOGLEVEL` environment variable (like `LOGLEVEL=debug`) for more logging
 - `entities/` - entity classes as FGD with their keys, components, inputs and outputs, per module, and datamaps no entity class has as unused base classes (CS2 and Deadlock, inputs and outputs only on Windows)
 - `interfaces.txt` - interfaces exposed by each module
 - `logging_channels.txt` - logging channels with their defaults
-- `module_metadata/` - metadata of each module as KV3 (Windows only, modules have none on Linux)
+- `module_metadata/` - metadata of each module as text, a file per section: Pulse bindings and fingerprints, resource manifests and tool bind targets. Sections that other dumps have are left out, and anything not written as text goes to `unhandled.json` (Windows only, modules have none on Linux)
 - `.stringsignore` - names that GameTracking removes from its strings dumps
 
 If anything fails to dump, it exits with code 1 and `schemas.json` is not written.

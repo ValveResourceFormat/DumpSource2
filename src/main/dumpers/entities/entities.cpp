@@ -610,7 +610,7 @@ static std::string FormatPulseParams(const nlohmann::json& params)
 // Returns false if the metadata is not what it's expected to be.
 static bool AddInputsAndOutputs(const CModule& module, const std::string& rootName, const ModuleSchemas_t& schemas, std::map<std::string, EntityClass_t>& classes)
 {
-	auto metadata = ModuleMetadata::GetJSON(module);
+	const auto& metadata = ModuleMetadata::GetJSON(module);
 
 	// Already logged
 	if (metadata.is_discarded())

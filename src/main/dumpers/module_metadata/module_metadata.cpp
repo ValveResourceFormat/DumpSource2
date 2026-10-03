@@ -18,16 +18,19 @@
  */
 
 #include "module_metadata.h"
+#include "sections.h"
 #include "gamedata.h"
 #include "globalvariables.h"
 #include "modules.h"
 #include "output.h"
 #include "utils/common.h"
 #include "utils/module.h"
-#include "keyvalues3.h"
 #include <algorithm>
+#include <map>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
+#include <fmt/ranges.h>
 #include <spdlog/spdlog.h>
 
 namespace Dumpers::ModuleMetadata
@@ -125,27 +128,35 @@ nlohmann::ordered_json KV3ToJSON(void* kv3)
 	return nlohmann::ordered_json::parse(QuoteNonFiniteFloats(buf.Get()), nullptr, false);
 }
 
-nlohmann::ordered_json GetJSON(const CModule& module)
+// Read once per module, both the metadata and entities dumpers use it
+const nlohmann::ordered_json& GetJSON(const CModule& module)
 {
+	static std::unordered_map<std::string, nlohmann::ordered_json> cache;
+
+	auto [it, inserted] = cache.try_emplace(module.m_pszModule);
+	if (!inserted)
+		return it->second;
+
+	auto& json = it->second;
+
 	void* kv3;
 	if (!ExtractModuleMetadata(module, kv3))
-		return nlohmann::ordered_json::value_t::discarded;
-
-	if (!kv3)
-		return nullptr;
-
-	auto json = KV3ToJSON(kv3);
-	if (json.is_discarded())
-		spdlog::critical("Failed to convert {} metadata to JSON", module.m_pszModule);
+	{
+		json = nlohmann::ordered_json::value_t::discarded;
+	}
+	else if (kv3)
+	{
+		json = KV3ToJSON(kv3);
+		if (json.is_discarded())
+			spdlog::critical("Failed to convert {} metadata to JSON", module.m_pszModule);
+	}
 
 	return json;
 }
 
+// A folder per module with a text file per section, and unhandled.json for keys no section writer knows
 bool Dump()
 {
-	typedef bool (*SaveKV3Text_ToStringFn)(KV3ID_t const&, void* kv3, SimpleCUtlString& err, SimpleCUtlString& str, uint flags);
-	static auto saveKV3Text_ToString = Modules::tier0->GetSymbol<SaveKV3Text_ToStringFn>(GameData::g_SaveKV3TextToStringSymbol);
-
 	std::unordered_set<std::string> foundModules;
 	const auto outputPath = Globals::outputPath / "module_metadata";
 	bool failed = false;
@@ -155,36 +166,66 @@ bool Dump()
 		spdlog::trace("Dumping metadata for {}", module.m_pszModule);
 
 		// The other modules are still written, but the files of failed ones are kept as they were
-		void* kv3;
-		if (!ExtractModuleMetadata(module, kv3))
+		const auto& metadata = GetJSON(module);
+		if (metadata.is_discarded())
 		{
 			failed = true;
 			continue;
 		}
 
-		if (!kv3)
+		// Modules without metadata providers have none
+		if (metadata.is_null())
 			continue;
 
-		SimpleCUtlString err, buf;
-		if (!saveKV3Text_ToString(g_KV3Encoding_Text, kv3, err, buf, KV3_SAVE_TEXT_NONE) || !buf.Get())
+		if (!metadata.is_object())
 		{
-			spdlog::critical("Failed to convert {} metadata to KV3 text: {}", module.m_pszModule, err.Get() ? err.Get() : "");
+			spdlog::critical("Module metadata of {} is not an object", module.m_pszModule);
 			failed = true;
 			continue;
 		}
 
-		auto sanitizedModuleName = std::string(module.m_pszModule);
-		std::replace(sanitizedModuleName.begin(), sanitizedModuleName.end(), '/', '_');
-		foundModules.insert(sanitizedModuleName);
+		std::map<std::string, std::string> files;
+		auto unhandled = nlohmann::ordered_json::object();
+		if (!WriteSections(module.m_pszModule, metadata, files, unhandled))
+		{
+			failed = true;
+			continue;
+		}
 
-		std::filesystem::create_directories(outputPath);
+		if (!unhandled.empty())
+		{
+			std::vector<std::string> keys;
+			for (const auto& [key, value] : unhandled.items())
+				keys.push_back(key);
 
-		const auto path = (outputPath / sanitizedModuleName).replace_extension(".kv3");
-		std::ofstream output(path);
-		output << buf.Get() << "\n";
+			spdlog::warn("Module metadata of {} has sections or keys that are not written as text, writing them to unhandled.json: {}", module.m_pszModule, fmt::join(keys, ", "));
+			files["unhandled.json"] = unhandled.dump(1, '\t', false, nlohmann::ordered_json::error_handler_t::replace) + "\n";
+		}
 
-		if (!CloseOutput(output, path))
-			return false;
+		// Like the entity datamaps and schema class descriptions, which are in other dumps
+		if (files.empty())
+			continue;
+
+		const auto moduleFileName = GetModuleFileName(module.m_pszModule);
+		foundModules.insert(moduleFileName);
+
+		const auto modulePath = outputPath / moduleFileName;
+		std::filesystem::create_directories(modulePath);
+
+		std::unordered_set<std::string> fileNames;
+		for (const auto& [fileName, text] : files)
+		{
+			const auto path = modulePath / fileName;
+			std::ofstream output(path);
+			output << text;
+
+			if (!CloseOutput(output, path))
+				return false;
+
+			fileNames.insert(std::filesystem::path(fileName).stem().string());
+		}
+
+		RemoveOrphanFiles(modulePath, fileNames, "metadata");
 	}
 
 	spdlog::info("Wrote module metadata for {} modules", foundModules.size());
@@ -198,7 +239,17 @@ bool Dump()
 	if (!std::filesystem::is_directory(outputPath))
 		return true;
 
-	RemoveOrphanFiles(outputPath, foundModules, "metadata");
+	// Files are from before metadata was written as a folder per module, like client.kv3
+	std::vector<std::filesystem::directory_entry> entries(std::filesystem::directory_iterator(outputPath), {});
+	for (const auto& entry : entries)
+	{
+		if (entry.is_directory() && GetKeptOutputName(entry, foundModules))
+			continue;
+
+		spdlog::info("Removing orphan metadata {}", entry.path().generic_string());
+		std::filesystem::remove_all(entry.path());
+	}
+
 	return true;
 }
 
