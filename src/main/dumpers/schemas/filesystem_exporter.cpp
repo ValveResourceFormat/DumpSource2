@@ -310,7 +310,10 @@ bool Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<In
 	std::filesystem::create_directories(schemaPath);
 
 	if (!DumpClasses(classes, schemaPath, foundFiles) || !DumpEnums(enums, schemaPath, foundFiles))
+	{
+		spdlog::critical("Schemas were partially written, {} has a mix of new and previous files", schemaPath.generic_string());
 		return false;
+	}
 
 	for (const auto& [name, count] : g_unknownMetadataCounts)
 		spdlog::warn("Metadata '{}' is not in metadatalist.h ({} usages), value {}", name, count, g_unknownMetadataSamples[name]);

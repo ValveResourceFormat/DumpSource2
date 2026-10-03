@@ -145,7 +145,7 @@ static int Run(int argc, char** argv)
 
 		if (!Dumpers::Schemas::Dump())
 		{
-			spdlog::critical("Not writing schemas, see above");
+			spdlog::critical("Failed to write schemas, see above");
 			exitCode = 1;
 		}
 
