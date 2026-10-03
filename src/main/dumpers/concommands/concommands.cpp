@@ -216,6 +216,12 @@ static void FixNewlineTabbing(std::string& str)
 		str.pop_back();
 }
 
+// String values are written in quotes on one line, escaped like JSON
+static std::string QuoteString(const std::string& str)
+{
+	return nlohmann::json(str).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+}
+
 static std::string EscapeDescription(std::string str)
 {
 	for (auto it = str.begin(); it != str.end(); it++)
@@ -560,7 +566,7 @@ static bool WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 				maxValue = entry.m_Max;
 			}
 
-			WriteValueLine(entry.m_eType == EConVarType_String ? "\"" + value.m_Text + "\"" : value.m_Text, minValue, maxValue, entry.m_pEnum ? entry.m_pEnum->m_pszName : nullptr, flags, output);
+			WriteValueLine(entry.m_eType == EConVarType_String ? QuoteString(value.m_Text) : value.m_Text, minValue, maxValue, entry.m_pEnum ? entry.m_pEnum->m_pszName : nullptr, flags, output);
 
 			item["type"] = value.m_pszType;
 			if (entry.m_pEnum)
