@@ -73,6 +73,12 @@ struct EntityClass_t
 	// The same keys and components for schemas.json
 	nlohmann::json m_Keys = nlohmann::json::array();
 	nlohmann::json m_Components = nlohmann::json::array();
+
+	// Datamaps whose keys the class has from itself or its bases, so they are written once: those of its datamap chain,
+	// and those of each component by the base component's name, like the scene node of CBodyComponent and its override CBodyComponentPoint
+	std::unordered_set<const datamap_t*> m_DataMaps;
+	std::map<std::string, std::unordered_set<const datamap_t*>> m_ComponentDataMaps;
+	bool m_bKeysAdded = false;
 };
 
 static const std::pair<int, const char*> g_ClassFlagNames[] = {
@@ -89,8 +95,8 @@ static const std::pair<int, const char*> g_ClassFlagNames[] = {
 	{ ECF_FORCE_WORLDGROUPID, "ECF_FORCE_WORLDGROUPID" },
 };
 
-// Classes override a few components at most, more means the array is not what it's expected to be
-static constexpr int g_MaxComponentOverrides = 64;
+// Classes add and override a few components at most, more means the list is not what it's expected to be
+static constexpr int g_MaxComponents = 64;
 
 // Flags which only a few classes set
 static std::vector<std::string> GetClassFlags(const CEntityClass* entityClass)
@@ -202,21 +208,25 @@ static const char* ValidateDataMap(const datamap_t* map)
 
 		if (!isValidOptionalName(field.fieldName) || !isValidOptionalName(field.externalName))
 			return "datamap field name";
-		if (field.fieldType == SpawnKeyType_t::FIELD_EMBEDDED && field.td)
-		{
-			if (auto invalid = ValidateDataMap(field.td))
-				return invalid;
-		}
 	}
 
 	return nullptr;
 }
 
-// Schema enums, which have the values of enum keys, and the modules of schema classes, by name
+// Schema enums, which have the values of enum keys, and schema classes, which have the modules and component datamaps, by name
 struct ModuleSchemas_t
 {
 	std::unordered_map<std::string, const SchemaEnumInfoData_t*> m_Enums;
-	std::unordered_map<std::string, std::string> m_ClassModules;
+	std::unordered_map<std::string, const SchemaClassInfoData_t*> m_Classes;
+};
+
+// The class keys are added to, and the component they are on with the datamaps it already has
+struct KeyTarget_t
+{
+	const ModuleSchemas_t& m_Schemas;
+	EntityClass_t& m_Entity;
+	const char* m_pszComponent = nullptr;
+	std::unordered_set<const datamap_t*>* m_pComponentDataMaps = nullptr;
 };
 
 // Enums and classes shared by client and server are only in one of their scopes, and others are in library scopes,
@@ -260,7 +270,7 @@ static bool GetModuleSchemas(const CModule& module, ModuleSchemas_t& schemas)
 		FOR_EACH_MAP(typeScope->m_DeclaredClasses.m_Map, iter)
 		{
 			if (const auto classInfo = typeScope->m_DeclaredClasses.m_Map.Element(iter)->m_pClassInfo)
-				schemas.m_ClassModules.try_emplace(classInfo->m_pszName, classInfo->m_pszProjectName);
+				schemas.m_Classes.try_emplace(classInfo->m_pszName, classInfo);
 		}
 	}
 
@@ -297,13 +307,20 @@ static bool GetArrayKeyNames(const typedescription_t& field, const char* key, st
 	return true;
 }
 
+// Datamaps chain to their base class datamap, deeper means the chain is not what it's expected to be
+static constexpr int g_MaxDataMapDepth = 64;
+
+static bool AddDataMapKeys(const datamap_t* map, const char* ownerName, KeyTarget_t& target, std::unordered_set<const datamap_t*>& dataMaps, const std::string& indent, const std::string& path,
+	std::vector<std::string>& lines);
+
 // Keys that can be set on the entity as FGD keys, with the datadesc type and C++ field in a comment.
 // Enum keys list their values as choices. Keys from embedded datamaps (like CCollisionProperty) are indented under a comment with their field.
-// The same keys go into keysJson, with the path of the embedded datamap fields they are under.
+// The same keys go into the class's schemas.json keys, with the path of the embedded datamap fields they are under.
 // Returns false if the datamap is not what it's expected to be.
-static bool AddKeyFields(const datamap_t* map, const ModuleSchemas_t& schemas, const std::string& indent, const std::string& path, std::vector<std::string>& lines, nlohmann::json& keysJson,
-	std::vector<std::string>& strings)
+static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::string& indent, const std::string& path, std::vector<std::string>& lines)
 {
+	const auto& schemas = target.m_Schemas;
+
 	for (int i = 0; i < map->dataNumFields; i++)
 	{
 		const auto& field = map->dataDesc[i];
@@ -315,8 +332,12 @@ static bool AddKeyFields(const datamap_t* map, const ModuleSchemas_t& schemas, c
 			if (!field.td)
 				continue;
 
+			// Outside components, the same struct can be embedded in several fields, like fogparams_t in the player pawns
+			std::unordered_set<const datamap_t*> embeddedDataMaps;
+			auto& dataMaps = target.m_pComponentDataMaps ? *target.m_pComponentDataMaps : embeddedDataMaps;
+
 			std::vector<std::string> embedded;
-			if (!AddKeyFields(field.td, schemas, indent + "\t", path.empty() ? field.fieldName : path + "." + field.fieldName, embedded, keysJson, strings))
+			if (!AddDataMapKeys(field.td, field.td->dataClassName, target, dataMaps, indent + "\t", path.empty() ? field.fieldName : path + "." + field.fieldName, embedded))
 				return false;
 
 			if (!embedded.empty())
@@ -363,7 +384,7 @@ static bool AddKeyFields(const datamap_t* map, const ModuleSchemas_t& schemas, c
 				keyJson["enumModule"] = enumInfo->m_pszProjectName;
 		}
 
-		strings.push_back(key);
+		target.m_Entity.m_Strings.push_back(key);
 
 		std::vector<std::string> arrayKeyNames;
 		if (!GetArrayKeyNames(field, key, arrayKeyNames))
@@ -377,9 +398,11 @@ static bool AddKeyFields(const datamap_t* map, const ModuleSchemas_t& schemas, c
 		keyJson["declaredIn"] = map->dataClassName;
 
 		// Embedded structs can be from another module, like hudtextparms_t in server's CGameText is only in client
-		if (auto it = schemas.m_ClassModules.find(map->dataClassName); it != schemas.m_ClassModules.end())
-			keyJson["declaredInModule"] = it->second;
+		if (auto it = schemas.m_Classes.find(map->dataClassName); it != schemas.m_Classes.end())
+			keyJson["declaredInModule"] = it->second->m_pszProjectName;
 
+		if (target.m_pszComponent)
+			keyJson["component"] = target.m_pszComponent;
 		if (hasCppField)
 			keyJson["field"] = field.fieldName;
 		if (!path.empty())
@@ -396,7 +419,7 @@ static bool AddKeyFields(const datamap_t* map, const ModuleSchemas_t& schemas, c
 			keyJson["arrayCount"] = arrayKeyNames.size();
 		}
 
-		keysJson.push_back(std::move(keyJson));
+		target.m_Entity.m_Keys.push_back(std::move(keyJson));
 
 		// Procedural keys like weapon%d are named in code and have no array size
 		if (arrayKeyNames.empty() && strchr(key, '%'))
@@ -427,6 +450,41 @@ static bool AddKeyFields(const datamap_t* map, const ModuleSchemas_t& schemas, c
 
 			lines.push_back(indent + "]");
 		}
+	}
+
+	return true;
+}
+
+// Keys of a datamap and its bases, down to one in dataMaps, which the class already has the keys of.
+// Bases with keys are under a comment with their name, unless it's the owner's, like the class the datamap is of.
+// Returns false if a datamap is invalid.
+static bool AddDataMapKeys(const datamap_t* map, const char* ownerName, KeyTarget_t& target, std::unordered_set<const datamap_t*>& dataMaps, const std::string& indent, const std::string& path,
+	std::vector<std::string>& lines)
+{
+	int depth = 0;
+
+	for (; map && !dataMaps.contains(map); map = map->baseMap)
+	{
+		auto invalid = ValidateDataMap(map);
+		if (!invalid && ++depth > g_MaxDataMapDepth)
+			invalid = "datamap chain";
+
+		if (invalid)
+		{
+			spdlog::critical("Datamap of {} has an invalid {}, datamap_t in the SDK needs updating", ownerName, invalid);
+			return false;
+		}
+
+		dataMaps.insert(map);
+
+		std::vector<std::string> keys;
+		if (!AddKeyFields(map, target, indent, path, keys))
+			return false;
+
+		if (!keys.empty() && strcmp(ownerName, map->dataClassName))
+			lines.push_back(fmt::format("{}// {}", indent, map->dataClassName));
+
+		lines.insert(lines.end(), keys.begin(), keys.end());
 	}
 
 	return true;
@@ -662,6 +720,9 @@ static const char* ValidateEntityClass(const CModule& module, const CEntityClass
 	if (auto binding = classInfo->m_pSchemaBinding; binding && (!Modules::FindModuleContaining(binding) || !Modules::IsValidName(binding->m_pszProjectName)))
 		return "schema binding";
 
+	if (entityClass->m_pfnEnumerateComponents && !Modules::IsInModule(module, (const void*)entityClass->m_pfnEnumerateComponents))
+		return "components function";
+
 	// A static array that ends with an empty entry
 	if (auto overrides = entityClass->m_pComponentOverrides)
 	{
@@ -670,7 +731,7 @@ static const char* ValidateEntityClass(const CModule& module, const CEntityClass
 
 		for (int i = 0; overrides[i].pszBaseComponent; i++)
 		{
-			if (i >= g_MaxComponentOverrides || !Modules::IsValidName(overrides[i].pszBaseComponent) || !Modules::IsValidName(overrides[i].pszOverrideComponent))
+			if (i >= g_MaxComponents || !Modules::IsValidName(overrides[i].pszBaseComponent) || !Modules::IsValidName(overrides[i].pszOverrideComponent))
 				return "component overrides";
 		}
 	}
@@ -695,36 +756,91 @@ static std::string GetFGDName(const CEntityClassInfo* classInfo)
 	return HasDesignName(classInfo) ? classInfo->m_pszClassname : classInfo->m_pszCPPClassname;
 }
 
-// Datamaps chain to their base class datamap, deeper means the chain is not what it's expected to be
-static constexpr int g_MaxDataMapDepth = 64;
-
-// Keys the class adds to its nearest base in the FGD, from its datamap chain down to the base's datamap.
-// This includes classes in between that are not entity classes. Returns false if a datamap is invalid.
-static bool AddClassKeyFields(const CEntityClassInfo* classInfo, const CEntityClassInfo* baseInfo, const ModuleSchemas_t& schemas, EntityClass_t& entity)
+// Datamap of a component, from its schema class. Components without keys of their own have none, and use their base's.
+static const datamap_t* GetComponentDataMap(const ModuleSchemas_t& schemas, const char* name)
 {
-	auto baseMap = baseInfo ? baseInfo->m_pDataDescMap : nullptr;
-	int depth = 0;
-
-	for (auto map = classInfo->m_pDataDescMap; map && map != baseMap; map = map->baseMap)
+	auto it = schemas.m_Classes.find(name);
+	if (it == schemas.m_Classes.end())
 	{
-		auto invalid = ValidateDataMap(map);
-		if (!invalid && ++depth > g_MaxDataMapDepth)
-			invalid = "datamap chain";
+		spdlog::warn("Entity component {} is not in the schema system, not writing its keys", name);
+		return nullptr;
+	}
 
-		if (invalid)
+	auto classInfo = it->second;
+	for (int depth = 0; classInfo && depth < g_MaxDataMapDepth; depth++)
+	{
+		if (classInfo->m_pDataDescMap)
+			return classInfo->m_pDataDescMap;
+
+		classInfo = classInfo->m_nBaseClassCount > 0 ? classInfo->m_pBaseClasses[0].m_pClass : nullptr;
+	}
+
+	return nullptr;
+}
+
+// Components the class adds and the ones it overrides, under a comment with the keys they add.
+// The classes add their own components, and overrides replace a base's component with a subclass of it, which adds keys to the base's.
+// Returns false if the components or a datamap are invalid.
+static bool AddComponentKeys(const CEntityClass* entityClass, const ModuleSchemas_t& schemas, EntityClass_t& entity)
+{
+	// The base component is the one it overrides, or itself, which overrides share the written datamaps of
+	auto addComponent = [&](const std::string& comment, const char* name, const char* baseName) {
+		entity.m_Lines.push_back(fmt::format("\t// component {}", comment));
+		entity.m_Strings.push_back(name);
+
+		auto& dataMaps = entity.m_ComponentDataMaps[baseName];
+		KeyTarget_t target{ schemas, entity, name, &dataMaps };
+		auto map = GetComponentDataMap(schemas, name);
+		return !map || AddDataMapKeys(map, name, target, dataMaps, "\t\t", "", entity.m_Lines);
+	};
+
+	if (entityClass->m_pfnEnumerateComponents)
+	{
+		// Allocated by the game, and freed with memoverride.cpp
+		CUtlVector<EntComponentNameEntry_t> added;
+		entityClass->m_pfnEnumerateComponents(&added);
+
+		if (added.Count() > g_MaxComponents)
 		{
-			spdlog::critical("Entity class {} has an invalid {}, datamap_t in the SDK needs updating", classInfo->m_pszCPPClassname, invalid);
+			spdlog::critical("Entity class {} has {} components, EntComponentNameEntry_t in the SDK needs updating", entityClass->m_pClassInfo->m_pszCPPClassname, added.Count());
 			return false;
 		}
 
-		if (strcmp(classInfo->m_pszCPPClassname, map->dataClassName))
-			entity.m_Lines.push_back(fmt::format("\t// {}", map->dataClassName));
+		for (int i = 0; i < added.Count(); i++)
+		{
+			const auto& component = added[i];
 
-		if (!AddKeyFields(map, schemas, "\t", "", entity.m_Lines, entity.m_Keys, entity.m_Strings))
+			if (!Modules::IsValidName(component.pszComponentClassName))
+			{
+				spdlog::critical("Entity class {} has an invalid component name, EntComponentNameEntry_t in the SDK needs updating", entityClass->m_pClassInfo->m_pszCPPClassname);
+				return false;
+			}
+
+			entity.m_Components.push_back({ { "name", component.pszComponentClassName } });
+			if (!addComponent(component.pszComponentClassName, component.pszComponentClassName, component.pszComponentClassName))
+				return false;
+		}
+	}
+
+	for (auto overrides = entityClass->m_pComponentOverrides; overrides && overrides->pszBaseComponent; overrides++)
+	{
+		entity.m_Components.push_back({ { "base", overrides->pszBaseComponent }, { "override", overrides->pszOverrideComponent } });
+		if (!addComponent(fmt::format("{}: {}", overrides->pszBaseComponent, overrides->pszOverrideComponent), overrides->pszOverrideComponent, overrides->pszBaseComponent))
 			return false;
 	}
 
 	return true;
+}
+
+// Keys the class adds to its nearest base in the FGD: its components, and its datamap chain down to the base's datamap.
+// The chain includes classes in between that are not entity classes. Returns false if a datamap is invalid.
+static bool AddClassKeys(const CEntityClass* entityClass, const ModuleSchemas_t& schemas, EntityClass_t& entity)
+{
+	if (!AddComponentKeys(entityClass, schemas, entity))
+		return false;
+
+	KeyTarget_t target{ schemas, entity };
+	return AddDataMapKeys(entityClass->m_pClassInfo->m_pDataDescMap, entityClass->m_pClassInfo->m_pszCPPClassname, target, entity.m_DataMaps, "\t", "", entity.m_Lines);
 }
 
 // Inputs or outputs for schemas.json, moved out of the list
@@ -838,13 +954,6 @@ bool Dump()
 			EntityClass_t entity;
 			entity.m_pClass = entityClass;
 
-			for (auto overrides = entityClass->m_pComponentOverrides; overrides && overrides->pszBaseComponent; overrides++)
-			{
-				entity.m_Lines.push_back(fmt::format("\t// component {}: {}", overrides->pszBaseComponent, overrides->pszOverrideComponent));
-				entity.m_Components.push_back({ { "base", overrides->pszBaseComponent }, { "override", overrides->pszOverrideComponent } });
-				entity.m_Strings.push_back(overrides->pszOverrideComponent);
-			}
-
 			auto fgdName = GetFGDName(entityClass->m_pClassInfo);
 			if (!classes.try_emplace(fgdName, std::move(entity)).second)
 			{
@@ -892,13 +1001,30 @@ bool Dump()
 			{
 				rootName = name;
 			}
-
-			if (!AddClassKeyFields(entity.m_pClass->m_pClassInfo, base, schemas, entity))
-			{
-				moduleFailed = true;
-				break;
-			}
 		}
+
+		// Bases first, so keys a class reaches again, like through a component override, are left out
+		std::function<bool(EntityClass_t&)> addKeys = [&](EntityClass_t& entity) {
+			if (entity.m_bKeysAdded)
+				return true;
+
+			entity.m_bKeysAdded = true;
+
+			if (!entity.m_BaseName.empty())
+			{
+				auto& base = classes.at(entity.m_BaseName);
+				if (!addKeys(base))
+					return false;
+
+				entity.m_DataMaps = base.m_DataMaps;
+				entity.m_ComponentDataMaps = base.m_ComponentDataMaps;
+			}
+
+			return AddClassKeys(entity.m_pClass, schemas, entity);
+		};
+
+		for (auto it = classes.begin(); !moduleFailed && it != classes.end(); ++it)
+			moduleFailed = !addKeys(it->second);
 
 		if (moduleFailed || !AddInputsAndOutputs(module, rootName, schemas, classes))
 		{
