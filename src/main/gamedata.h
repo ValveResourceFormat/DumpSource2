@@ -157,7 +157,7 @@ inline const std::unordered_set<std::string> g_HiddenDefaultKeys = {
 	"m_nRandomSeed",
 };
 
-// The same, but only zeroed in these classes. Classes that embed another one with the key are listed too.
+// The same, but only zeroed in these classes and their subclasses. Classes that embed another one with the key are listed too.
 inline const std::unordered_map<std::string, std::unordered_set<std::string>> g_HiddenClassDefaultKeys = {
 	{ "CAnimGraphDoc_ChoiceNode", { "m_seed" } },
 	{ "CAnimGraphDoc_ComponentState", { "m_stateID" } },

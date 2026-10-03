@@ -170,7 +170,20 @@ static void WriteDefaults(const nlohmann::ordered_json& value, const std::string
 	out += indent + (value.is_object() ? "}" : "]");
 }
 
-static std::optional<std::string> GetKV3Defaults(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName, std::optional<nlohmann::json>& jsonValue)
+// Hidden keys of the class and its bases, as subclasses inherit the keys with the values their constructors fill
+static void AddHiddenClassKeys(const SchemaClassInfoData_t* classInfo, std::unordered_set<std::string>& keys)
+{
+	if (!classInfo)
+		return;
+
+	if (auto it = GameData::g_HiddenClassDefaultKeys.find(classInfo->m_pszName); it != GameData::g_HiddenClassDefaultKeys.end())
+		keys.insert(it->second.begin(), it->second.end());
+
+	for (uint16_t i = 0; i < classInfo->m_nBaseClassCount; i++)
+		AddHiddenClassKeys(classInfo->m_pBaseClasses[i].m_pClass, keys);
+}
+
+static std::optional<std::string> GetKV3Defaults(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName, const SchemaClassInfoData_t* classInfo, std::optional<nlohmann::json>& jsonValue)
 {
 	if (!(*(void**)entry.m_pData) || GameData::g_ClassesWithBrokenDefaults.contains(metadataTargetName))
 		return "Could not parse KV3 Defaults";
@@ -188,9 +201,8 @@ static std::optional<std::string> GetKV3Defaults(const SchemaMetadataEntryData_t
 		return {};
 	}
 
-	static const std::unordered_set<std::string> noClassKeys;
-	auto classKeys = GameData::g_HiddenClassDefaultKeys.find(metadataTargetName);
-	const auto& hiddenClassKeys = classKeys != GameData::g_HiddenClassDefaultKeys.end() ? classKeys->second : noClassKeys;
+	std::unordered_set<std::string> hiddenClassKeys;
+	AddHiddenClassKeys(classInfo, hiddenClassKeys);
 
 	ZeroHiddenDefaults(defaults, hiddenClassKeys);
 	jsonValue = defaults;
@@ -349,7 +361,7 @@ static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData
 			return fmt::format("\"{}\"", JoinNames(className, "::", value->m_pszFieldName));
 		}
 		case MetadataValueType::KV3DEFAULTS:
-			return GetKV3Defaults(entry, metadataTargetName, jsonValue);
+			return GetKV3Defaults(entry, metadataTargetName, classInfo, jsonValue);
 	}
 
 	return {};
