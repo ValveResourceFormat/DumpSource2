@@ -52,7 +52,9 @@ public:
 
 	void* FindNext(bool allowWildcard)
 	{
-		for (size_t i = 0; i < m_iSize; i++)
+		// Only up to where the signature still fits before the end
+		const size_t remaining = m_pBase + m_iSize - m_pCurrent;
+		for (size_t i = 0; i + m_iSigLength <= remaining; i++)
 		{
 			size_t Matches = 0;
 			while (*(m_pCurrent + i + Matches) == m_pSignature[Matches] || (allowWildcard && m_pSignature[Matches] == '\x2A'))
@@ -120,7 +122,8 @@ public:
 
 		pMemory = (byte*)m_base;
 
-		for (size_t i = 0; i < m_size; i++)
+		// Only up to where the signature still fits before the end
+		for (size_t i = 0; i + iSigLength <= m_size; i++)
 		{
 			size_t Matches = 0;
 			while (*(pMemory + i + Matches) == pData[Matches] || pData[Matches] == '\x2A')
