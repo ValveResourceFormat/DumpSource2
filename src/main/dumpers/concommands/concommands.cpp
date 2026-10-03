@@ -216,13 +216,6 @@ static void FixNewlineTabbing(std::string& str)
 		str.pop_back();
 }
 
-// The engine looks up convars and commands case-insensitively
-static std::string ToLower(std::string str)
-{
-	std::transform(str.begin(), str.end(), str.begin(), [](unsigned char c) { return std::tolower(c); });
-	return str;
-}
-
 static std::string EscapeDescription(std::string str)
 {
 	for (auto it = str.begin(); it != str.end(); it++)
@@ -511,7 +504,7 @@ static bool LoadWorkshopWhitelist(std::set<std::string>& names)
 		if (close == std::string::npos)
 			break;
 
-		names.insert(ToLower(text.substr(quote + 1, close - quote - 1)));
+		names.insert(ToLowerAscii(text.substr(quote + 1, close - quote - 1)));
 		quote = close;
 	}
 
@@ -547,7 +540,7 @@ static bool WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 		auto flags = fmt::format("{}", fmt::join(flagNames, " "));
 
 		// Only in schemas.json. Found names are removed, so the ones left over can be reported
-		if (whitelist.erase(ToLower(name)))
+		if (whitelist.erase(ToLowerAscii(name)))
 			flagNames.push_back("workshop_whitelisted");
 
 		if (isConVar)

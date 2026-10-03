@@ -283,20 +283,28 @@ bool Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<In
 	for (const auto& [name, count] : g_unknownMetadataCounts)
 		spdlog::warn("Metadata '{}' is not in metadatalist.h ({} usages), value {}", name, count, g_unknownMetadataSamples[name]);
 
-	for (const auto& entry : std::filesystem::directory_iterator(schemaPath))
-	{
-		auto projectName = entry.path().filename().string();
-		auto files = foundFiles.find(projectName);
+	std::unordered_set<std::string> modules;
+	for (const auto& [module, files] : foundFiles)
+		modules.insert(module);
 
-		if (entry.is_directory() && files == foundFiles.end())
+	// Collected first, as folders are renamed and removed
+	std::vector<std::filesystem::directory_entry> entries(std::filesystem::directory_iterator(schemaPath), {});
+
+	for (const auto& entry : entries)
+	{
+		if (!entry.is_directory())
+			continue;
+
+		// A folder whose name differs only in case is renamed to its module
+		const auto module = GetKeptOutputName(entry, modules);
+		if (!module)
 		{
 			spdlog::info("Removing orphan schema folder {}", entry.path().generic_string());
 			std::filesystem::remove_all(entry.path());
+			continue;
 		}
-		else if (files != foundFiles.end())
-		{
-			RemoveOrphanFiles(entry.path(), files->second, "schema");
-		}
+
+		RemoveOrphanFiles(schemaPath / *module, foundFiles.at(*module), "schema");
 	}
 
 	return true;
