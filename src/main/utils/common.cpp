@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "tier0/logging.h"
+#include "tier0/memalloc.h"
 #include "utlstring.h"
 #include "bufferstring.h"
 #include <spdlog/spdlog.h>
@@ -23,8 +24,12 @@ void ExitError(const char* pMsg, ...)
 	exit(1);
 }
 
-// Stubs for tier0 functions, which is not linked.
+// Stubs for tier0 functions, which is only linked on Windows (for memoverride.cpp).
 // The SDK interfaces library calls Plat_ExitProcess, the rest are called from SDK headers in debug builds.
+#ifndef _WIN32
+
+// Set to tier0's when it's loaded, the SDK's containers free memory the game allocates with it
+IMemAlloc* g_pMemAlloc = nullptr;
 
 void Plat_ExitProcess(int) {
 	// STUB
@@ -146,3 +151,5 @@ int V_tier0_strlen(const char*) {
 	// STUB
 	return 0;
 }
+
+#endif

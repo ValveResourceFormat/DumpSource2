@@ -13,7 +13,15 @@ function(BUILD_HL2SDK GAME SDK_PATH)
 	)
 
 	if(WIN32)
-		target_link_libraries(HL2SDK-${GAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/lib/public/win64/interfaces.lib)
+		target_link_libraries(HL2SDK-${GAME} INTERFACE
+			${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/lib/public/win64/interfaces.lib
+			${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/lib/public/win64/tier0.lib
+		)
+
+		# Routes the CRT allocator to tier0's like the game's modules do, so memory the game allocates
+		# (like CUtlVector elements) can be freed with the SDK's containers
+		target_sources(HL2SDK-${GAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/public/tier0/memoverride.cpp)
+		target_compile_definitions(HL2SDK-${GAME} INTERFACE MEMOVERRIDE_MODULE=DumpSource2)
 	else()
 		target_link_libraries(HL2SDK-${GAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/lib/linux64/interfaces.a)
 	endif()

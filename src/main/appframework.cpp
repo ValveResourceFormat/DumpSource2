@@ -91,6 +91,11 @@ void InitializeModules()
 	Modules::tier0 = std::make_unique<CModule>("", "tier0");
 	Modules::schemaSystem = std::make_unique<CModule>("", "schemasystem");
 
+#ifndef _WIN32
+	// tier0 is not linked on Linux, so its allocator is set from the export
+	g_pMemAlloc = *Modules::tier0->GetSymbol<IMemAlloc**>("g_pMemAlloc");
+#endif
+
 	Dumpers::ConCommands::CollectQueues(*Modules::tier0);
 	Dumpers::ConCommands::CollectQueues(*Modules::schemaSystem);
 
