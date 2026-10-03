@@ -328,19 +328,22 @@ static bool AddKeyFields(const datamap_t* map, const ModuleSchemas_t& schemas, c
 			continue;
 		}
 
-		// Procedural keys are handled in code and have no C++ field
+		// Procedural keys are handled in code, and removed keys remove a key of a base class.
+		// Neither has a C++ field, their key is in the field name.
 		const bool isProcedural = field.flags & FTYPEDESC_PROCEDURAL_KEYFIELD;
-		const char* key = isProcedural ? field.fieldName : field.externalName;
+		const bool isRemoved = field.flags & FTYPEDESC_REMOVED_KEYFIELD;
+		const bool hasCppField = !isProcedural && !isRemoved;
+		const char* key = hasCppField ? field.externalName : field.fieldName;
 		if (!key || !key[0])
 			continue;
 
 		auto [typeName, fgdType] = GetFieldTypeNames(field.fieldType);
 
 		// FGDs remove keys a base class has with this type
-		if (field.flags & FTYPEDESC_REMOVED_KEYFIELD)
+		if (isRemoved)
 			fgdType = "remove_key";
 
-		auto cppField = isProcedural ? std::string() : fmt::format(" {}", field.fieldName);
+		auto cppField = hasCppField ? fmt::format(" {}", field.fieldName) : std::string();
 
 		// The union holds an enum name for enum fields
 		const SchemaEnumInfoData_t* enumInfo = nullptr;
@@ -377,13 +380,13 @@ static bool AddKeyFields(const datamap_t* map, const ModuleSchemas_t& schemas, c
 		if (auto it = schemas.m_ClassModules.find(map->dataClassName); it != schemas.m_ClassModules.end())
 			keyJson["declaredInModule"] = it->second;
 
-		if (!isProcedural)
+		if (hasCppField)
 			keyJson["field"] = field.fieldName;
 		if (!path.empty())
 			keyJson["path"] = path;
 		if (isProcedural)
 			keyJson["procedural"] = true;
-		if (field.flags & FTYPEDESC_REMOVED_KEYFIELD)
+		if (isRemoved)
 			keyJson["removed"] = true;
 
 		// Array keys are one key with the name pattern
@@ -410,7 +413,7 @@ static bool AddKeyFields(const datamap_t* map, const ModuleSchemas_t& schemas, c
 			const auto& keyName = arrayKeyNames[k];
 			auto comment = fmt::format("{}{}{}{}", typeName, cppField, keyName != key ? fmt::format("[{}]", k) : "", enumComment);
 
-			if (!enumInfo)
+			if (!enumInfo || isRemoved)
 			{
 				lines.push_back(fmt::format("{}{}({}) // {}", indent, keyName, fgdType, comment));
 				continue;
