@@ -87,7 +87,7 @@ bool Dump()
 		// Tags are allocated from a static array in tier0.
 		bool valid = channel && channel->m_ID == id && channel->m_Flags == getFlags(id) && channel->m_Verbosity == getVerbosity(id) && channel->m_SpewColor.GetRawColor() == getColor(id) && memchr(channel->m_Name, '\0', sizeof(channel->m_Name));
 
-		for (auto tag = channel->m_pFirstTag; valid && tag; tag = tag->m_pNextTag)
+		for (auto tag = valid ? channel->m_pFirstTag : nullptr; valid && tag; tag = tag->m_pNextTag)
 			valid = Modules::IsInModule(*Modules::tier0, tag) && Modules::IsValidName(tag->m_pTagName);
 
 		if (!valid)
