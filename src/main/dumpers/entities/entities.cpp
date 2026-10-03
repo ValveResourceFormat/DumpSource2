@@ -504,6 +504,10 @@ static bool AddInputsAndOutputs(const CModule& module, const std::string& rootNa
 {
 	auto metadata = ModuleMetadata::GetJSON(module);
 
+	// Already logged
+	if (metadata.is_discarded())
+		return false;
+
 #ifndef _WIN32
 	// Modules have no metadata on Linux
 	if (metadata.is_null())

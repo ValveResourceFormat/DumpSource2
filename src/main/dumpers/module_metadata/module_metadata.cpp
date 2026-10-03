@@ -33,7 +33,8 @@
 namespace Dumpers::ModuleMetadata
 {
 
-// Reads the module's metadata KV3 into kv3, which is null if it has none. Returns false if the module can't be asked for it.
+// Reads the module's metadata KV3 into kv3, which is null if it has none. Returns false if the module can't be asked for it
+// or failed to build it.
 static bool ExtractModuleMetadata(const CModule& module, void*& kv3)
 {
 	typedef void* (*ExtractModuleMetadataFn)(SimpleCUtlString& str);
@@ -48,16 +49,19 @@ static bool ExtractModuleMetadata(const CModule& module, void*& kv3)
 	SimpleCUtlString additional_info;
 	kv3 = extractModuleMetadataFn(additional_info);
 
-	// Modules without metadata return null on Linux (and an empty kv3 on Windows)
+#ifdef _WIN32
+	// The metadata providers in the module build it, and modules without any return an empty kv3.
+	// Null means a provider failed, like Pulse when its bindings assert, with the error in additional_info.
 	if (!kv3)
 	{
-		if (additional_info.Get())
-			spdlog::debug("{} has no metadata: {}", module.m_pszModule, additional_info.Get());
+		spdlog::critical("Metadata of {} failed to build: {}", module.m_pszModule, additional_info.Get() ? additional_info.Get() : "no error given");
+		return false;
 	}
-	else if (additional_info.Get())
-	{
-		spdlog::warn("{} has additional_info {}", module.m_pszModule, additional_info.Get());
-	}
+#else
+	// Modules without metadata return null on Linux
+	if (!kv3 && additional_info.Get())
+		spdlog::debug("{} has no metadata: {}", module.m_pszModule, additional_info.Get());
+#endif
 
 	return true;
 }
@@ -144,14 +148,19 @@ bool Dump()
 
 	std::unordered_set<std::string> foundModules;
 	const auto outputPath = Globals::outputPath / "module_metadata";
+	bool failed = false;
 
 	for (const auto& module : Modules::allModules)
 	{
 		spdlog::trace("Dumping metadata for {}", module.m_pszModule);
 
+		// The other modules are still written, but the files of failed ones are kept as they were
 		void* kv3;
 		if (!ExtractModuleMetadata(module, kv3))
-			return false;
+		{
+			failed = true;
+			continue;
+		}
 
 		if (!kv3)
 			continue;
@@ -160,7 +169,8 @@ bool Dump()
 		if (!saveKV3Text_ToString(g_KV3Encoding_Text, kv3, err, buf, KV3_SAVE_TEXT_NONE) || !buf.Get())
 		{
 			spdlog::critical("Failed to convert {} metadata to KV3 text: {}", module.m_pszModule, err.Get() ? err.Get() : "");
-			return false;
+			failed = true;
+			continue;
 		}
 
 		auto sanitizedModuleName = std::string(module.m_pszModule);
@@ -178,6 +188,12 @@ bool Dump()
 	}
 
 	spdlog::info("Wrote module metadata for {} modules", foundModules.size());
+
+	if (failed)
+	{
+		spdlog::critical("Not removing orphan module metadata files, see above");
+		return false;
+	}
 
 	if (!std::filesystem::is_directory(outputPath))
 		return true;
