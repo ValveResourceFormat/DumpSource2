@@ -185,9 +185,11 @@ bool InitializeSchemas()
 		return false;
 	}
 
+	// The entities dumper still runs after this fails, and checks for a schema system that can be used
 	if (!Interfaces::schemaSystem->Connect(&AppSystemFactory) || Interfaces::schemaSystem->Init() != INIT_OK)
 	{
 		spdlog::critical("Failed to connect or initialize {}", SCHEMASYSTEM_INTERFACE_VERSION);
+		Interfaces::schemaSystem = nullptr;
 		return false;
 	}
 
