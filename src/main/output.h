@@ -18,8 +18,10 @@
  */
 #pragma once
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <string>
 #include <spdlog/spdlog.h>
 
 // Closes a written file. Returns false if it could not be opened or written to, like on a full disk.
@@ -34,6 +36,13 @@ inline bool CloseOutput(std::ofstream& output, const std::filesystem::path& path
 	}
 
 	return true;
+}
+
+// Module names have a / for modules in subfolders, like tools/hammer
+inline std::string GetModuleFileName(std::string module)
+{
+	std::replace(module.begin(), module.end(), '/', '_');
+	return module;
 }
 
 // Removes files in a folder whose name without extension is not in keep, left over from things the game no longer has

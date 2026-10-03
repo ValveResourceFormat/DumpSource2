@@ -928,11 +928,15 @@ bool Dump()
 	std::filesystem::create_directories(outputPath);
 
 	size_t count = 0;
+	std::unordered_set<std::string> fileNames;
 
 	// One FGD per module, the client and server classes of an entity differ
 	for (auto& [module, classes] : entities)
 	{
-		const auto path = outputPath / (module + ".fgd");
+		const auto fileName = GetModuleFileName(module);
+		fileNames.insert(fileName);
+
+		const auto path = outputPath / (fileName + ".fgd");
 		std::ofstream output(path);
 		output << "// Dumped by https://github.com/ValveResourceFormat/DumpSource2\n\n";
 
@@ -983,7 +987,7 @@ bool Dump()
 		count += classes.size();
 	}
 
-	RemoveOrphanFiles(outputPath, entities, "entities");
+	RemoveOrphanFiles(outputPath, fileNames, "entities");
 
 	spdlog::info("Wrote {} entity classes from {} modules to entities", count, entities.size());
 
