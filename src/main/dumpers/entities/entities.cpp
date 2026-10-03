@@ -98,34 +98,46 @@ static const std::pair<int, const char*> g_ClassFlagNames[] = {
 // Classes add and override a few components at most, more means the list is not what it's expected to be
 static constexpr int g_MaxComponents = 64;
 
+// The names of the set flags, and the bits that are neither named nor otherwise known as one UNKNOWN_ name
+template <size_t N>
+static std::vector<std::string> GetFlagNames(uint32_t flags, const std::pair<int, const char*> (&names)[N], uint32_t otherKnownFlags, std::string_view unknownPrefix)
+{
+	std::vector<std::string> result;
+	uint32_t known = otherKnownFlags;
+
+	for (const auto& [flag, name] : names)
+	{
+		known |= flag;
+		if (flags & flag)
+			result.push_back(name);
+	}
+
+	if (auto unknown = flags & ~known)
+		result.push_back(fmt::format("{}UNKNOWN_{:X}", unknownPrefix, unknown));
+
+	return result;
+}
+
+// Flags as ", NAME, NAME" for FGD comments
+static std::string FormatFlags(const std::vector<std::string>& flags)
+{
+	std::string text;
+	for (const auto& flag : flags)
+		text += ", " + flag;
+
+	return text;
+}
+
 // Flags which only a few classes set
 static std::vector<std::string> GetClassFlags(const CEntityClass* entityClass)
 {
-	std::vector<std::string> names;
-	auto flags = entityClass->m_flags;
-
-	for (const auto& [flag, name] : g_ClassFlagNames)
-	{
-		if (flags & flag)
-		{
-			names.push_back(name);
-			flags &= ~flag;
-		}
-	}
-
-	if (flags)
-		names.push_back(fmt::format("ECF_UNKNOWN_{:X}", flags));
-
-	return names;
+	return GetFlagNames(entityClass->m_flags, g_ClassFlagNames, 0, "ECF_");
 }
 
 // C++ class, flags and spawn order, for the comment above FGD classes
 static std::string GetClassComment(const CEntityClass* entityClass)
 {
-	auto comment = std::string(entityClass->m_pClassInfo->m_pszCPPClassname);
-
-	for (const auto& flag : GetClassFlags(entityClass))
-		comment += ", " + flag;
+	auto comment = std::string(entityClass->m_pClassInfo->m_pszCPPClassname) + FormatFlags(GetClassFlags(entityClass));
 
 	if (entityClass->m_SpawnOrder)
 		comment += fmt::format(", spawn order {}", entityClass->m_SpawnOrder);
@@ -229,6 +241,21 @@ struct KeyTarget_t
 	std::unordered_set<const datamap_t*>* m_pComponentDataMaps = nullptr;
 };
 
+// Flags that only a few keys have, the others are shown by the key's type and name
+static const std::pair<int, const char*> g_RareFieldFlagNames[] = {
+	{ FTYPEDESC_ADDED_KEYFIELD, "ADDED_KEYFIELD" },
+	{ FTYPEDESC_ADDITIONAL_FIELDS, "ADDITIONAL_FIELDS" },
+	{ FTYPEDESC_EXPLICIT_BASE, "EXPLICIT_BASE" },
+};
+
+static constexpr int g_ShownFieldFlags = FTYPEDESC_KEY | FTYPEDESC_PTR | FTYPEDESC_GEN_ARRAY_KEYNAMES_0 | FTYPEDESC_GEN_ARRAY_KEYNAMES_1 | FTYPEDESC_PROCEDURAL_KEYFIELD | FTYPEDESC_ENUM |
+                                         FTYPEDESC_REMOVED_KEYFIELD;
+
+static std::vector<std::string> GetRareFieldFlags(int flags)
+{
+	return GetFlagNames(flags, g_RareFieldFlagNames, g_ShownFieldFlags, "");
+}
+
 // Enums and classes shared by client and server are only in one of their scopes, and others are in library scopes,
 // so all scopes are used. The module's own scope comes first, then the others by name.
 // Returns false if an enum is invalid.
@@ -327,6 +354,9 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 		if (!field.fieldName || !field.fieldName[0])
 			continue;
 
+		const auto flags = GetRareFieldFlags(field.flags);
+		const auto flagsComment = FormatFlags(flags);
+
 		if (field.fieldType == SpawnKeyType_t::FIELD_EMBEDDED)
 		{
 			if (!field.td)
@@ -342,7 +372,7 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 
 			if (!embedded.empty())
 			{
-				lines.push_back(fmt::format("{}// {} ({})", indent, field.fieldName, field.td->dataClassName));
+				lines.push_back(fmt::format("{}// {} ({}{})", indent, field.fieldName, field.td->dataClassName, flagsComment));
 				lines.insert(lines.end(), embedded.begin(), embedded.end());
 			}
 
@@ -411,6 +441,8 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 			keyJson["procedural"] = true;
 		if (isRemoved)
 			keyJson["removed"] = true;
+		if (!flags.empty())
+			keyJson["flags"] = flags;
 
 		// Array keys are one key with the name pattern
 		if (!arrayKeyNames.empty())
@@ -424,7 +456,7 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 		// Procedural keys like weapon%d are named in code and have no array size
 		if (arrayKeyNames.empty() && strchr(key, '%'))
 		{
-			lines.push_back(fmt::format("{}// {}({}) // {}{}{}", indent, key, fgdType, typeName, cppField, enumComment));
+			lines.push_back(fmt::format("{}// {}({}) // {}{}{}{}", indent, key, fgdType, typeName, cppField, enumComment, flagsComment));
 			continue;
 		}
 
@@ -434,7 +466,7 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 		for (size_t k = 0; k < arrayKeyNames.size(); k++)
 		{
 			const auto& keyName = arrayKeyNames[k];
-			auto comment = fmt::format("{}{}{}{}", typeName, cppField, keyName != key ? fmt::format("[{}]", k) : "", enumComment);
+			auto comment = fmt::format("{}{}{}{}{}", typeName, cppField, keyName != key ? fmt::format("[{}]", k) : "", enumComment, flagsComment);
 
 			if (!enumInfo || isRemoved)
 			{
