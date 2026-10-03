@@ -153,11 +153,37 @@ static const nlohmann::json* FindFieldDefault(const nlohmann::json& defaults, co
 	return it != defaults.end() ? &*it : nullptr;
 }
 
-// The file for a class or enum, recorded so outdated files can be removed
-static std::filesystem::path GetOutputPath(const std::filesystem::path& schemaPath, const std::string& module, std::string name, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
+// Some classes have :: in them which we can't save.
+static std::string GetFileName(std::string name)
 {
-	// Some classes have :: in them which we can't save.
 	std::replace(name.begin(), name.end(), ':', '_');
+	return name;
+}
+
+// Classes and enums share a folder per module, and Windows filesystems treat names that differ only in case as the same file,
+// so two of them can be written to one file, the second overwriting the first. Returns false if any would.
+template <typename T>
+static bool FindFileCollisions(const std::vector<T>& types, std::map<std::string, std::map<std::string, std::string>>& lowerNames)
+{
+	bool collided = false;
+
+	for (const auto& type : types)
+	{
+		auto [it, inserted] = lowerNames[type.module].try_emplace(ToLowerAscii(GetFileName(type.name)), type.name);
+		if (!inserted)
+		{
+			spdlog::critical("Schemas {} and {} in {} would be written to the same file", it->second, type.name, type.module);
+			collided = true;
+		}
+	}
+
+	return !collided;
+}
+
+// The file for a class or enum, recorded so outdated files can be removed
+static std::filesystem::path GetOutputPath(const std::filesystem::path& schemaPath, const std::string& module, const std::string& typeName, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
+{
+	auto name = GetFileName(typeName);
 	auto [files, isNewModule] = foundFiles.try_emplace(module);
 	files->second.insert(name);
 
@@ -274,6 +300,12 @@ static bool DumpEnums(const std::vector<IntermediateSchemaEnum>& enums, const st
 bool Dump(const std::vector<IntermediateSchemaEnum>& enums, const std::vector<IntermediateSchemaClass>& classes)
 {
 	const auto schemaPath = Globals::outputPath / "schemas";
+
+	// Checked before writing anything, to keep the previous dump
+	std::map<std::string, std::map<std::string, std::string>> lowerNames;
+	if (!FindFileCollisions(classes, lowerNames) || !FindFileCollisions(enums, lowerNames))
+		return false;
+
 	std::map<std::string, std::unordered_set<std::string>> foundFiles;
 	std::filesystem::create_directories(schemaPath);
 
