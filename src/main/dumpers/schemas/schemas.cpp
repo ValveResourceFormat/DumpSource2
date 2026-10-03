@@ -77,6 +77,8 @@ static const char* ValidateClass(const SchemaClassInfoData_t* classInfo)
 
 		if (!Modules::IsValidName(field.m_pszName))
 			return "field name";
+		if (!field.m_pType)
+			return "field type";
 		if (field.m_nSingleInheritanceOffset < 0 || field.m_nSingleInheritanceOffset > classInfo->m_nSize)
 			return "field offset";
 		if (auto invalid = ValidateMetadata(field.m_pStaticMetadata, field.m_nStaticMetadataCount))
