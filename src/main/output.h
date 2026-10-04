@@ -72,7 +72,13 @@ inline std::optional<std::string> GetKeptOutputName(const std::filesystem::direc
 		if (ToLowerAscii(keptName) != lowerName)
 			continue;
 
+		// Only when it's the file that was written. Folders can be case-sensitive, like those WSL creates, and then the written one is
+		// another file, which renaming would replace with this old one.
 		const auto renamed = path.parent_path() / (keptName + (entry.is_directory() ? "" : path.extension().string()));
+		std::error_code error;
+		if (!std::filesystem::equivalent(path, renamed, error))
+			return std::nullopt;
+
 		spdlog::info("Renaming {} to {}", path.generic_string(), renamed.filename().generic_string());
 		std::filesystem::rename(path, renamed);
 		return keptName;
