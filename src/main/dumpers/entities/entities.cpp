@@ -1014,6 +1014,10 @@ static nlohmann::json GetEntitiesJson(std::map<std::string, std::map<std::string
 				json["designName"] = classInfo->m_pszClassname;
 			if (!entity.m_BaseName.empty())
 				json["baseClass"] = classes.at(entity.m_BaseName).m_pClass->m_pClassInfo->m_pszCPPClassname;
+			// The flags and spawn order as the class declares them, read before CEntitySystem::RegisterEntityClass runs.
+			// Registration copies ECF_NOT_NETWORKED, ECF_ALWAYS_SPAWN_ON_CLIENT, ECF_BECOME_SUSPENDED_INSTEAD_OF_DORMANT,
+			// ECF_ANONYMOUS_ENTITY and ECF_SPAWN_GROUP_HANDLE_INVALID and ECF_FORCE_WORLDGROUPID from the nearest base,
+			// and its spawn order when the class's is zero, so classes have those of their baseClass chain too.
 			if (auto flags = GetClassFlags(entity.m_pClass); !flags.empty())
 				json["flags"] = std::move(flags);
 			if (entity.m_pClass->m_SpawnOrder)
