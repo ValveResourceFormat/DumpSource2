@@ -236,6 +236,9 @@ struct ModuleSchemas_t
 
 	// Datamaps whose keys are in the FGD, filled while adding them
 	std::unordered_set<const datamap_t*> m_WrittenDataMaps;
+
+	// Datamaps of the module's entity classes
+	std::unordered_set<const datamap_t*> m_EntityDataMaps;
 };
 
 // The class keys are added to, and the component they are on with the datamaps it already has
@@ -352,13 +355,14 @@ static bool GetArrayKeyNames(const typedescription_t& field, const char* key, st
 static constexpr int g_MaxDataMapDepth = 64;
 
 static bool AddDataMapKeys(const datamap_t* map, const char* ownerName, KeyTarget_t& target, std::unordered_set<const datamap_t*>& dataMaps, const std::string& indent, const std::string& path,
-	std::vector<std::string>& lines);
+	const std::vector<std::string>& pathFlags, std::vector<std::string>& lines, bool isEntityClass = false);
 
 // Keys that can be set on the entity as FGD keys, with the datadesc type and C++ field in a comment.
 // Enum keys list their values as choices. Keys from embedded datamaps (like CCollisionProperty) are indented under a comment with their field.
-// The same keys go into the class's schemas.json keys, with the path of the embedded datamap fields they are under.
+// The same keys go into the class's schemas.json keys, with the path of the embedded datamap fields they are under,
+// and the rare flags of those fields, like EXPLICIT_BASE, with their own.
 // Returns false if the datamap is not what it's expected to be.
-static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::string& indent, const std::string& path, std::vector<std::string>& lines)
+static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::string& indent, const std::string& path, const std::vector<std::string>& pathFlags, std::vector<std::string>& lines)
 {
 	const auto& schemas = target.m_Schemas;
 
@@ -380,8 +384,15 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 			std::unordered_set<const datamap_t*> embeddedDataMaps;
 			auto& dataMaps = target.m_pComponentDataMaps ? *target.m_pComponentDataMaps : embeddedDataMaps;
 
+			auto embeddedFlags = pathFlags;
+			for (const auto& flag : flags)
+			{
+				if (std::ranges::find(embeddedFlags, flag) == embeddedFlags.end())
+					embeddedFlags.push_back(flag);
+			}
+
 			std::vector<std::string> embedded;
-			if (!AddDataMapKeys(field.td, field.td->dataClassName, target, dataMaps, indent + "\t", path.empty() ? field.fieldName : path + "." + field.fieldName, embedded))
+			if (!AddDataMapKeys(field.td, field.td->dataClassName, target, dataMaps, indent + "\t", path.empty() ? field.fieldName : path + "." + field.fieldName, embeddedFlags, embedded))
 				return false;
 
 			if (!embedded.empty())
@@ -455,8 +466,15 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 			keyJson["procedural"] = true;
 		if (isRemoved)
 			keyJson["removed"] = true;
-		if (!flags.empty())
-			keyJson["flags"] = flags;
+		auto keyFlags = flags;
+		for (const auto& flag : pathFlags)
+		{
+			if (std::ranges::find(keyFlags, flag) == keyFlags.end())
+				keyFlags.push_back(flag);
+		}
+
+		if (!keyFlags.empty())
+			keyJson["flags"] = std::move(keyFlags);
 
 		// Array keys are one key with the name pattern
 		if (!arrayKeyNames.empty())
@@ -503,9 +521,12 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 
 // Keys of a datamap and its bases, down to one in dataMaps, which the class already has the keys of.
 // Bases with keys are under a comment with their name, unless it's the owner's, like the class the datamap is of.
+// For an entity class's own datamap, the walk stops at a base datamap that isn't an entity class's: the engine builds each
+// entity class's key table from its datamap only, linked to its base entity class's table, and follows the base datamaps
+// only in embedded fields (FIELD_EMBEDDED, and FTYPEDESC_EXPLICIT_BASE ones that bring in a base that isn't an entity class).
 // Returns false if a datamap is invalid.
 static bool AddDataMapKeys(const datamap_t* map, const char* ownerName, KeyTarget_t& target, std::unordered_set<const datamap_t*>& dataMaps, const std::string& indent, const std::string& path,
-	std::vector<std::string>& lines)
+	const std::vector<std::string>& pathFlags, std::vector<std::string>& lines, bool isEntityClass)
 {
 	int depth = 0;
 
@@ -521,11 +542,19 @@ static bool AddDataMapKeys(const datamap_t* map, const char* ownerName, KeyTarge
 			return false;
 		}
 
+		if (isEntityClass && depth > 1 && !target.m_Schemas.m_EntityDataMaps.contains(map))
+		{
+			if (map->dataNumFields > 0)
+				spdlog::info("Not listing the keys of datamap {} under {}, the engine doesn't apply a base datamap that isn't an entity class's", map->dataClassName, ownerName);
+
+			break;
+		}
+
 		dataMaps.insert(map);
 		target.m_Schemas.m_WrittenDataMaps.insert(map);
 
 		std::vector<std::string> keys;
-		if (!AddKeyFields(map, target, indent, path, keys))
+		if (!AddKeyFields(map, target, indent, path, pathFlags, keys))
 			return false;
 
 		if (!keys.empty() && strcmp(ownerName, map->dataClassName))
@@ -838,7 +867,7 @@ static bool AddComponentKeys(const CEntityClass* entityClass, ModuleSchemas_t& s
 		auto& dataMaps = entity.m_ComponentDataMaps[baseName];
 		KeyTarget_t target{ schemas, entity, name, &dataMaps };
 		auto map = GetComponentDataMap(schemas, name);
-		return !map || AddDataMapKeys(map, name, target, dataMaps, "\t\t", "", entity.m_Lines);
+		return !map || AddDataMapKeys(map, name, target, dataMaps, "\t\t", "", {}, entity.m_Lines);
 	};
 
 	if (entityClass->m_pfnEnumerateComponents)
@@ -879,15 +908,15 @@ static bool AddComponentKeys(const CEntityClass* entityClass, ModuleSchemas_t& s
 	return true;
 }
 
-// Keys the class adds to its nearest base in the FGD: its components, and its datamap chain down to the base's datamap.
-// The chain includes classes in between that are not entity classes. Returns false if a datamap is invalid.
+// Keys the class adds to its nearest base in the FGD: its components, and its datamap down to the base's datamap.
+// Returns false if a datamap is invalid.
 static bool AddClassKeys(const CEntityClass* entityClass, ModuleSchemas_t& schemas, EntityClass_t& entity)
 {
 	if (!AddComponentKeys(entityClass, schemas, entity))
 		return false;
 
 	KeyTarget_t target{ schemas, entity };
-	return AddDataMapKeys(entityClass->m_pClassInfo->m_pDataDescMap, entityClass->m_pClassInfo->m_pszCPPClassname, target, entity.m_DataMaps, "\t", "", entity.m_Lines);
+	return AddDataMapKeys(entityClass->m_pClassInfo->m_pDataDescMap, entityClass->m_pClassInfo->m_pszCPPClassname, target, entity.m_DataMaps, "\t", "", {}, entity.m_Lines, true);
 }
 
 // Datamaps in the module that no entity class has, like modifiers and structs only code fills, as FGD base classes nothing uses.
@@ -915,7 +944,7 @@ static bool GetUnusedDataMapLines(const CModule& module, ModuleSchemas_t& schema
 		EntityClass_t entity;
 		KeyTarget_t target{ schemas, entity };
 		std::vector<std::string> keys;
-		if (!AddKeyFields(map, target, "\t", "", keys))
+		if (!AddKeyFields(map, target, "\t", "", {}, keys))
 			return false;
 
 		if (!keys.empty())
@@ -945,7 +974,7 @@ static bool GetUnusedDataMapLines(const CModule& module, ModuleSchemas_t& schema
 
 		KeyTarget_t target{ schemas, entity };
 		std::vector<std::string> keys;
-		if (!AddDataMapKeys(map, map->dataClassName, target, entity.m_DataMaps, "\t", "", keys))
+		if (!AddDataMapKeys(map, map->dataClassName, target, entity.m_DataMaps, "\t", "", {}, keys))
 			return false;
 
 		lines.push_back(fmt::format("@BaseClass{} = {}", baseBlock ? fmt::format(" base({})", baseBlock->dataClassName) : "", map->dataClassName));
@@ -1109,6 +1138,12 @@ bool Dump()
 		{
 			failed = true;
 			continue;
+		}
+
+		for (const auto& [name, entity] : classes)
+		{
+			if (entity.m_pClass->m_pClassInfo->m_pDataDescMap)
+				schemas.m_EntityDataMaps.insert(entity.m_pClass->m_pClassInfo->m_pDataDescMap);
 		}
 
 		// The nearest base in the list, and the keys added since it. The hierarchy root gets the inputs and outputs of any entity.
