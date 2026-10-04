@@ -79,10 +79,10 @@ static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_VCONSOLE_SET_FOCUS, "vconsole_set_focus" },
 	{ FCVAR_CLIENTCMD_CAN_EXECUTE, "clientcmd_can_execute" },
 	{ FCVAR_EXECUTE_PER_TICK, "execute_per_tick" },
-	{ 1ull << 30, "snapshot_ignored" }, // Not in every SDK yet
+	{ FCVAR_SNAPSHOT_IGNORED, "snapshot_ignored" },
 	{ FCVAR_DEFENSIVE, "defensive" },
 	{ 1ull << 33, "execute_immediately" },      // Not in any SDK, name is ours. Runs right away inside a __beginseq batch instead of being queued (exec, execifexists)
-	{ 1ull << 34, "gameinfo_cannot_override" }, // Not in every SDK yet
+	{ FCVAR_GAMEINFO_CANNOT_OVERRIDE, "gameinfo_cannot_override" },
 	{ 1ull << 37, "enum_value" },               // Not in any SDK, name is ours. Value is a schema enum or enum flags, written as enumerator names
 };
 
@@ -168,10 +168,8 @@ static ConVarValue_t FormatValue(EConVarType type, const CVValue_t* value)
 			return { "vector4", FormatVector(value->m_vec4Value, 4), false };
 		case EConVarType_Qangle:
 			return { "qangle", FormatVector(value->m_angValue, 3), false };
-#ifndef GAME_DEADLOCK
 		case EConVarType_VectorWS:
 			return { "vector_ws", FormatVector(value->m_vecwsValue, 3), false };
-#endif
 		// ValidateConVar only lets known types through
 		default:
 			return { "unknown", {}, false };
