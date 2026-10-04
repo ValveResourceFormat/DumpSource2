@@ -19,21 +19,6 @@
 
 #include "network.h"
 
-#ifdef GAME_DEADLOCK
-
-namespace Dumpers::Network
-{
-
-// Deadlock still has its networking in the schema metadata, and an older network database than the SDK types
-bool Dump()
-{
-	return true;
-}
-
-} // namespace Dumpers::Network
-
-#else
-
 // inetchannel.h needs generated protobuf headers, the network serializer types only use this enum from it
 #define INETCHANNEL_H
 enum NetChannelBufType_t : int;
@@ -528,5 +513,3 @@ bool Dump()
 }
 
 } // namespace Dumpers::Network
-
-#endif
