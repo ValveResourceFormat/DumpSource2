@@ -112,8 +112,10 @@ const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
 	return nullptr;
 }
 
-// Metadata that schemasystem stores as class flags instead of in the class metadata.
-// Bits 16 and 17 are also used, but schemasystem has no names for them, the SDK's MConstructibleClassBase is a guess.
+// Metadata that schemasystem stores as class flags instead of in the class metadata. MConstructibleClassBase is named in
+// schemasystem's registration errors. Bit 16 is also used, which schemasystem treats like an abstract class when checking
+// that classes are constructible like their bases, but it has no name for it.
+// TODO: Write bit 16 when its name is known, the SDK's MNonConstructibleClassBase is a guess
 static constexpr std::pair<uint32, const char*> g_ClassInfoTagFlags[] = {
 	{ SCHEMA_CF1_INFO_TAG_MNetworkAssumeNotNetworkable, "MNetworkAssumeNotNetworkable" },
 	{ SCHEMA_CF1_INFO_TAG_MNetworkNoBase, "MNetworkNoBase" },
@@ -121,6 +123,7 @@ static constexpr std::pair<uint32, const char*> g_ClassInfoTagFlags[] = {
 	{ SCHEMA_CF1_INFO_TAG_MDisableDataDescValidation, "MDisableDataDescValidation" },
 	{ SCHEMA_CF1_INFO_TAG_MClassHasEntityLimitedDataDesc, "MClassHasEntityLimitedDataDesc" },
 	{ SCHEMA_CF1_INFO_TAG_MClassHasCustomAlignedNewDelete, "MClassHasCustomAlignedNewDelete" },
+	{ SCHEMA_CF1_INFO_TAG_MConstructibleClassBase, "MConstructibleClassBase" },
 	{ SCHEMA_CF1_INFO_TAG_MHasKV3TransferPolymorphicClassname, "MHasKV3TransferPolymorphicClassname" },
 };
 
