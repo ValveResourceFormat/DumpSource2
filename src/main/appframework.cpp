@@ -205,6 +205,19 @@ bool InitializeSchemas()
 			fn(SCHEMASYSTEM_INTERFACE_VERSION, Interfaces::schemaSystem);
 	}
 
+	for (const auto& info : g_FactoryInterfaces)
+	{
+		auto module = std::find_if(Modules::allModules.begin(), Modules::allModules.end(), [&](const CModule& m) { return !strcmp(m.m_pszModule, info.moduleName); });
+		auto found = module != Modules::allModules.end() ? TryFindInterface(*module, info.interfaceVersion) : nullptr;
+		if (!found)
+		{
+			spdlog::warn("{} does not expose {}, update g_FactoryInterfaces in gamedata.h", info.moduleName, info.interfaceVersion);
+			continue;
+		}
+
+		g_factoryMap[info.interfaceVersion] = (IAppSystem*)found;
+	}
+
 	std::vector<std::pair<const char*, IAppSystem*>> connectable;
 	for (const auto& appSystem : g_AppSystems)
 	{
@@ -240,4 +253,9 @@ bool InitializeSchemas()
 		spdlog::warn("Connect returned false for {}, add the app systems they need to g_AppSystems in gamedata.h (LOGLEVEL=trace lists missing interfaces)", failed);
 
 	return true;
+}
+
+bool HasConnectedInterface(const char* version)
+{
+	return g_factoryMap.contains(version);
 }

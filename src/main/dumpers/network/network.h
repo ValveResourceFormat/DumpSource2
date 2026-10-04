@@ -1,7 +1,7 @@
 /**
  * =============================================================================
  * DumpSource2
- * Copyright (C) 2024 ValveResourceFormat Contributors
+ * Copyright (C) 2026 ValveResourceFormat Contributors
  * =============================================================================
  *
  * This program is free software; you can redistribute it and/or modify it under
@@ -18,8 +18,10 @@
  */
 #pragma once
 
-void InitializeModules();
-bool InitializeSchemas();
+namespace Dumpers::Network
+{
 
-// Whether modules got this interface when they connected
-bool HasConnectedInterface(const char* version);
+// Writes network/<module>.txt and adds the network data to the classes and fields in schemas.json
+bool Dump();
+
+} // namespace Dumpers::Network

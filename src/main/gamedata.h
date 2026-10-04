@@ -23,6 +23,8 @@
 
 #include <icvar.h>
 #include <interfaces/interfaces.h>
+#include <tier1/utlstring.h>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -117,6 +119,12 @@ inline const std::vector<AppSystemInfo_t> g_AppSystems{
 	{ false, "subtools/netgraph_subtool", "VConsole_SubTool_001_NetGraphTool" },
 	{ false, "subtools/soundviewer_subtool", "VConsole_SubTool_001_SoundViewerTool" },
 	{ false, "subtools/vprof_subtool", "VConsole_SubTool_001_ShowBudgetTool" },
+};
+
+// Interfaces that app systems get when connecting, which aren't app systems themselves.
+// Client and server keep INetworkMessages for their network class registrations.
+inline const std::vector<AppSystemInfo_t> g_FactoryInterfaces{
+	{ false, "networksystem", "NetworkMessagesVersion001" },
 };
 
 //-----------------------------------------------------------------------------
@@ -237,5 +245,50 @@ inline const byte g_EntityClassListSignature[] = "\x48\x8B\x1D\x2A\x2A\x2A\x2A\x
 
 // Modules that always link entities, not finding their list means the signature is outdated
 inline const std::unordered_set<std::string> g_RequiredEntityModules = { "client", "server" };
+
+//-----------------------------------------------------------------------------
+// Network
+//-----------------------------------------------------------------------------
+
+// Networked classes register into a CNetworkSerializerCodeGenDatabase (from the SDK) in these modules.
+// Static initializers queue the registrations, which run when the game connects the module, which the dumper doesn't do.
+inline const std::set<std::string> g_NetworkModules = { "client", "server" };
+
+// Signature of that code, the same in each module: the call that runs the queued registrations, then the database getter call,
+// then the lea of the module's name for the call that finalizes it. Other code matches too, so the match is the one with the module's name.
+// To update, find the xref to the "couldn't look up codegen info for CEntityClass" string, its function is called right after.
+#ifdef _WIN32
+inline const byte g_NetworkDatabaseSignature[] = "\xE8\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x48\x8B\xC8\x48\x8D";
+inline constexpr size_t g_NetworkDatabaseNameOffset = 13;
+#else
+inline const byte g_NetworkDatabaseSignature[] = "\xE8\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x48\x8D\x35\x2A\x2A\x2A\x2A\x48\x89\xC7\xE8";
+inline constexpr size_t g_NetworkDatabaseNameOffset = 10;
+#endif
+
+// NetworkRecipientsFilter_t in the SDK has the callback as a function pointer, but it is a pointer to member function,
+// which is 16 bytes with the Itanium ABI (Linux) instead of 8, so the name is after it
+struct NetworkMemberFunctionOwner_t
+{
+};
+
+struct SendProxyRecipientsFilter_t
+{
+	void* m_unk001;
+	void (NetworkMemberFunctionOwner_t::*m_Callback)();
+	CUtlString m_Name;
+};
+
+// CNetworkSerializerFieldInfo::m_NetworkPolymorphic is a byte later than in the SDK
+inline constexpr size_t g_NetworkPolymorphicOffset = 0x10A;
+
+// What a NetworkOverride_t changes of the base class field, by its kind
+inline const std::unordered_map<int, std::string> g_NetworkOverrideKinds = {
+	{ 0, "serializer" },
+	{ 1, "encoder" },
+	{ 2, "changeCallback" },
+	{ 4, "bitCount" },
+	{ 5, "userGroup" },
+	{ 6, "priority" },
+};
 
 } // namespace GameData
