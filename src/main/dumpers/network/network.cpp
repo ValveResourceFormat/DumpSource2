@@ -20,6 +20,7 @@
 #include "network.h"
 
 // inetchannel.h needs generated protobuf headers, the network serializer types only use this enum from it
+// TODO: Remove when the SDK's inetworkserializer.h doesn't need inetchannel.h
 #define INETCHANNEL_H
 enum NetChannelBufType_t : int;
 #include <bitvec.h>

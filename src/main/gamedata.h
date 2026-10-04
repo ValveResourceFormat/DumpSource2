@@ -267,6 +267,7 @@ inline constexpr size_t g_NetworkDatabaseNameOffset = 10;
 
 // NetworkRecipientsFilter_t in the SDK has the callback as a function pointer, but it is a pointer to member function,
 // which is 16 bytes with the Itanium ABI (Linux) instead of 8, so the name is after it
+// TODO: Use NetworkRecipientsFilter_t when the SDK has the callback as a pointer to member function
 struct NetworkMemberFunctionOwner_t
 {
 };
@@ -280,6 +281,7 @@ struct SendProxyRecipientsFilter_t
 
 // CNetworkSerializerFieldInfo members that are not in the SDK, or unnamed there. networksystem copies them into
 // the flattened field when it initializes one from the field info, and ProcessOverride sets them for overrides.
+// TODO: Use the members when every SDK has them, and remove these offsets
 // The list of MNetworkChangeTag names, a CUtlVector<CUtlString> where the SDK has m_unk101 to m_unk103
 inline constexpr size_t g_NetworkChangeTagsOffset = 0xD8;
 // The field's OOPVSUpdates_* value, an int where the SDK has m_unk201, which MNetworkOutOfPVSUpdates overrides
@@ -291,6 +293,7 @@ inline constexpr size_t g_NetworkPolymorphicOffset = 0x10A;
 
 // CNetworkSerializerClassInfo declared with DECLARE_EMBEDDED_NETWORKVAR_NOTFLATTENED(), a bool after
 // m_NetworkStructNotInNetworkUtlVectorEmbedded that the SDK doesn't have
+// TODO: Use the member when every SDK has it
 inline constexpr size_t g_NetworkClassNotFlattenedOffset = 0x1C5;
 
 // OOPVSUpdates_Default, the class and field value that defers to the bases and the enclosing struct
@@ -298,6 +301,7 @@ inline constexpr int g_NetworkOutOfPVSUpdatesDefault = 2;
 
 // What a NetworkOverride_t changes of the base class field, by its kind, NetworkOverrideType_t in networksystem
 // (MNetworkSerializer, MNetworkEncoder, ...). Its m_FieldPriority in the SDK is the value of every kind.
+// TODO: Use the SDK's names for the kind and value when it has them
 inline const std::unordered_map<int, std::string> g_NetworkOverrideKinds = {
 	{ 0, "serializer" },
 	{ 1, "encoder" },

@@ -81,9 +81,9 @@ static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_EXECUTE_PER_TICK, "execute_per_tick" },
 	{ FCVAR_SNAPSHOT_IGNORED, "snapshot_ignored" },
 	{ FCVAR_DEFENSIVE, "defensive" },
-	{ 1ull << 33, "execute_immediately" },      // Not in any SDK, name is ours. Runs right away inside a __beginseq batch instead of being queued (exec, execifexists)
+	{ 1ull << 33, "execute_immediately" },      // TODO: Not in any SDK, name is ours. Runs right away inside a __beginseq batch instead of being queued (exec, execifexists)
 	{ FCVAR_GAMEINFO_CANNOT_OVERRIDE, "gameinfo_cannot_override" },
-	{ 1ull << 37, "enum_value" },               // Not in any SDK, name is ours. Value is a schema enum or enum flags, written as enumerator names
+	{ 1ull << 37, "enum_value" },               // TODO: Not in any SDK, name is ours. Value is a schema enum or enum flags, written as enumerator names
 };
 
 static std::vector<std::string> GetFlagNames(uint64_t flags)
@@ -270,6 +270,7 @@ static std::map<std::string, const SchemaEnumInfoData_t*> g_EnumConVars;
 
 // The custom data of enum_value convars is their schema enum, returned wrapped in a struct rather than as the void* of
 // FnCustomData_t in the SDK. The constructor makes MSVC return it through memory like the game does, gcc and clang in a register.
+// TODO: Use FnCustomData_t when the SDK has it return a struct
 struct CustomDataEnum_t
 {
 	CustomDataEnum_t() {}
