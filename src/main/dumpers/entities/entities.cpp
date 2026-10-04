@@ -231,8 +231,8 @@ struct ModuleSchemas_t
 	std::unordered_map<std::string, const SchemaEnumInfoData_t*> m_Enums;
 	std::unordered_map<std::string, const SchemaClassInfoData_t*> m_Classes;
 
-	// Datamaps of the schema classes in every scope, which can be in any module
-	std::vector<const datamap_t*> m_DataMaps;
+	// Datamaps of the schema classes in every scope, with the module of their class
+	std::vector<std::pair<const datamap_t*, std::string_view>> m_DataMaps;
 
 	// Datamaps whose keys are in the FGD, filled while adding them
 	std::unordered_set<const datamap_t*> m_WrittenDataMaps;
@@ -311,7 +311,7 @@ static bool GetModuleSchemas(const CModule& module, ModuleSchemas_t& schemas)
 			schemas.m_Classes.try_emplace(classInfo->m_pszName, classInfo);
 
 			if (classInfo->m_pDataDescMap && dataMaps.insert(classInfo->m_pDataDescMap).second)
-				schemas.m_DataMaps.push_back(classInfo->m_pDataDescMap);
+				schemas.m_DataMaps.emplace_back(classInfo->m_pDataDescMap, classInfo->m_pszProjectName);
 		}
 	}
 
@@ -894,10 +894,11 @@ static bool AddClassKeys(const CEntityClass* entityClass, ModuleSchemas_t& schem
 // A base datamap that has its own block is the FGD base, like for the entity classes. Returns false if a datamap is invalid.
 static bool GetUnusedDataMapLines(const CModule& module, ModuleSchemas_t& schemas, std::vector<std::string>& lines)
 {
+	// By the module of their class, as pointers can't be checked to be in a module on Linux
 	std::vector<const datamap_t*> unused;
-	for (auto map : schemas.m_DataMaps)
+	for (const auto& [map, project] : schemas.m_DataMaps)
 	{
-		if (Modules::IsInModule(module, map) && !schemas.m_WrittenDataMaps.contains(map))
+		if (project == module.m_pszModule && !schemas.m_WrittenDataMaps.contains(map))
 			unused.push_back(map);
 	}
 
