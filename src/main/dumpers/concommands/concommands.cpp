@@ -48,7 +48,7 @@ namespace Dumpers::ConCommands
 
 using namespace GameData;
 
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_UNREGISTERED, "unregistered" },
 	{ FCVAR_DEVELOPMENTONLY, "developmentonly" },
@@ -195,7 +195,7 @@ static ConVarValue_t FormatValue(EConVarType type, const CVValue_t* value)
 			return { "float32", FormatNumber(value->m_fl32Value), true };
 		case EConVarType_Float64:
 			return { "float64", FormatNumber(value->m_fl64Value), true };
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 		// Every convar is a string there, which can have a min and max
 		case EConVarType_String:
 			return { "string", value->m_StringValue.m_pString ? value->m_StringValue.m_pString : "", true };
@@ -330,7 +330,7 @@ static const SchemaEnumInfoData_t* GetEnum(const ConVarValueInfo_t& info)
 	return reinterpret_cast<CustomDataEnum_t (*)()>(info.m_fnCustomData)().m_pEnum;
 }
 
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 // A changed layout can still match the signature, so check what is read from the list before using it.
 // Returns what is invalid, or null.
 static const char* ValidateListed(const CModule& module, const ConCommandBase* base)
@@ -566,7 +566,7 @@ static uint64 GetModuleRegisterFlags(const char* module)
 // modules gets the modules that declare it
 static QueuedEntry_t MergeQueued(const std::vector<QueuedEntry_t*>& entries, std::set<std::string>& modules)
 {
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 	constexpr uint64 laterWins = 0;
 	constexpr uint64 stripped = 0;
 #else

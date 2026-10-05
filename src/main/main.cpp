@@ -151,7 +151,7 @@ static int Run(int argc, char** argv)
 			exitCode = 1;
 		}
 
-#ifndef GAME_HLVR // Half-Life: Alyx modules have no metadata
+#if !defined(GAME_HLVR) && !defined(GAME_STEAMVR) // Half-Life: Alyx modules have no metadata
 		if (!Dumpers::ModuleMetadata::Dump())
 			exitCode = 1;
 #endif
@@ -175,7 +175,7 @@ static int Run(int argc, char** argv)
 	if (!Dumpers::LoggingChannels::Dump())
 		exitCode = 1;
 
-#ifndef GAME_HLVR // Half-Life: Alyx has no network database
+#if !defined(GAME_HLVR) && !defined(GAME_STEAMVR) // Half-Life: Alyx has no network database
 	// Needs the connected modules
 	if (connected && !Dumpers::Network::Dump())
 		exitCode = 1;

@@ -30,13 +30,14 @@ function(BUILD_HL2SDK GAME SDK_PATH)
 	endif()
 endfunction()
 
-set(SDKS_WITHOUT_MEMOVERRIDE HLVR)
+set(SDKS_WITHOUT_MEMOVERRIDE HLVR STEAMVR)
 
 # DO NOT MODIFY, if you wish to switch the sdk for a game do it in src/main/CMakeLists.txt
 build_hl2sdk(CS2 hl2sdk-cs2)
 build_hl2sdk(DOTA hl2sdk-dota)
 build_hl2sdk(DEADLOCK hl2sdk-deadlock)
 build_hl2sdk(HLVR hl2sdk-hlvr)
+build_hl2sdk(STEAMVR hl2sdk-steamvr)
 
 # EXTERNAL LIBRARIES
 # ---

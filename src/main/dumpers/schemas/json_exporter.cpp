@@ -53,7 +53,7 @@ static json SerializeType(CSchemaType* type)
 
 	json j;
 
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 	// Half-Life: Alyx's types return their categories from virtuals
 	const auto typeCategory = type->GetTypeCategory();
 	const auto atomicCategory = type->GetAtomicCategory();
@@ -117,7 +117,7 @@ static json SerializeType(CSchemaType* type)
 				j["count"] = static_cast<CSchemaType_Atomic_I*>(type)->m_nInteger;
 			}
 
-#ifndef GAME_HLVR
+#if !defined(GAME_HLVR) && !defined(GAME_STEAMVR)
 			// Like the inline element count of CUtlVectorFixedGrowable<T, N>
 			if (atomicCategory == SCHEMA_ATOMIC_COLLECTION_OF_T)
 			{
@@ -179,7 +179,7 @@ static void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, jso
 		json classObj;
 		classObj["name"] = intermediateClass.name;
 		classObj["module"] = intermediateClass.module;
-#ifndef GAME_HLVR // Half-Life: Alyx is dumped once, the layout would go out of date when the game updates
+#if !defined(GAME_HLVR) && !defined(GAME_STEAMVR) // Half-Life: Alyx is dumped once, the layout would go out of date when the game updates
 		classObj["size"] = intermediateClass.size;
 
 		if (intermediateClass.alignment != 255)
@@ -200,7 +200,7 @@ static void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, jso
 			parentObj["name"] = parent.name;
 			parentObj["module"] = parent.module;
 
-#ifndef GAME_HLVR
+#if !defined(GAME_HLVR) && !defined(GAME_STEAMVR)
 			if (parent.offset)
 				parentObj["offset"] = parent.offset;
 #endif
@@ -215,7 +215,7 @@ static void DumpClasses(const std::vector<IntermediateSchemaClass>& classes, jso
 		{
 			json fieldObj;
 			fieldObj["name"] = field.name;
-#ifndef GAME_HLVR
+#if !defined(GAME_HLVR) && !defined(GAME_STEAMVR)
 			fieldObj["offset"] = field.offset;
 #endif
 			fieldObj["type"] = SerializeType(field.type);

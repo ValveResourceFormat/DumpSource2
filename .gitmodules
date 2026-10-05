@@ -30,3 +30,8 @@
 	url = https://github.com/ValveResourceFormat/hl2sdk
 	branch = hlvr
 	shallow = true
+[submodule "hl2sdk-steamvr"]
+	path = vendor/hl2sdk-steamvr
+	url = https://github.com/ValveResourceFormat/hl2sdk
+	branch = steamvr
+	shallow = true

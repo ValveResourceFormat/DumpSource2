@@ -85,7 +85,7 @@ static const char* ValidateClass(const SchemaClassInfoData_t* classInfo)
 			return invalid;
 	}
 
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 	if (classInfo->m_nStaticFieldCount > 0 && !Modules::FindModuleContaining(classInfo->m_pStaticFields))
 		return "static fields pointer";
 
@@ -127,7 +127,7 @@ const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
 	return nullptr;
 }
 
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 // Half-Life: Alyx has no info tag flags, it keeps them in the metadata
 static constexpr std::pair<uint32, const char*> g_ClassFlags[] = {
 	{ SCHEMA_CF1_IS_ABSTRACT, "abstract" },
@@ -203,7 +203,7 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 			schemaClass.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName, classInfo));
 		}
 
-#ifndef GAME_HLVR
+#if !defined(GAME_HLVR) && !defined(GAME_STEAMVR)
 		for (const auto& [flag, name] : g_ClassInfoTagFlags)
 		{
 			if (classInfo->m_nFlags1 & flag)
@@ -240,7 +240,7 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 			schemaClass.fields.push_back(std::move(intermediateField));
 		}
 
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 		for (uint16_t k = 0; k < classInfo->m_nStaticFieldCount; k++)
 		{
 			const auto& field = classInfo->m_pStaticFields[k];

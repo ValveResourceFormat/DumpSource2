@@ -92,7 +92,7 @@ struct ModuleFile
 	std::string file;
 };
 
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 // Copies the module into a temporary folder with its .rdata section made writable, and points module at the copy
 static bool UseCopyWithWritableRdata(ModuleFile& module)
 {
@@ -123,6 +123,11 @@ static bool UseCopyWithWritableRdata(ModuleFile& module)
 // Loads every module that links tier1 and reads its convar queues, without touching schemasystem or app systems
 void InitializeModules()
 {
+#ifdef _WIN32
+	// Imports are searched in System32 before the current folder, and Windows has its own icuuc.dll that SteamVR Home's v8 can't use
+	SetDllDirectoryW(std::filesystem::current_path().c_str());
+#endif
+
 	Modules::tier0 = std::make_unique<CModule>("", "tier0");
 	Modules::schemaSystem = std::make_unique<CModule>("", "schemasystem");
 
@@ -175,7 +180,7 @@ void InitializeModules()
 	std::string failed;
 	for (auto& module : modules)
 	{
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 		if (g_ModulesWritingToRdata.contains(module.name) && !UseCopyWithWritableRdata(module))
 			spdlog::warn("{} has no .rdata section, loading it as is", module.name);
 #endif

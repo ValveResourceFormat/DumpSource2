@@ -186,7 +186,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MGetKV3ClassDefaults", MetadataValueType::KV3DEFAULTS },
 
 	// MISC
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 	// Only the filter function in Half-Life: Alyx
 	{ "MNetworkSendProxyRecipientsFilter", MetadataValueType::FUNCTION },
 #else
