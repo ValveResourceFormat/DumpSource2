@@ -48,7 +48,7 @@ namespace Dumpers::ConCommands
 
 using namespace GameData;
 
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_UNREGISTERED, "unregistered" },
 	{ FCVAR_DEVELOPMENTONLY, "developmentonly" },
@@ -70,12 +70,18 @@ static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_DONTRECORD, "dontrecord" },
 	{ FCVAR_SS_ADDED, "ss_added" },
 	{ FCVAR_RELEASE, "release" },
+#ifdef GAME_STEAMPAL
+	// SteamPal's tier0 names bit 20 MENUBAR_ITEM and has no names for bits 21, 23, 24 and 25
+	{ 1ull << 20, "menubar_item" },
+	{ FCVAR_NOT_CONNECTED, "notconnected" },
+#else
 	{ FCVAR_RELOAD_MATERIALS, "reload_materials" },
 	{ FCVAR_RELOAD_TEXTURES, "reload_textures" },
 	{ FCVAR_NOT_CONNECTED, "notconnected" },
 	{ FCVAR_MATERIAL_SYSTEM_THREAD, "material_system_thread" },
 	{ FCVAR_ARCHIVE_XBOX, "archive_xbox" },
 	{ FCVAR_ACCESSIBLE_FROM_THREADS, "accessible_from_threads" },
+#endif
 	{ FCVAR_LINKED_CONCOMMAND, "linked_concommand" },
 	{ FCVAR_VCONSOLE_FUZZY_MATCHING, "vconsole_fuzzy_matching" },
 	{ FCVAR_SERVER_CAN_EXECUTE, "server_can_execute" },
@@ -195,7 +201,7 @@ static ConVarValue_t FormatValue(EConVarType type, const CVValue_t* value)
 			return { "float32", FormatNumber(value->m_fl32Value), true };
 		case EConVarType_Float64:
 			return { "float64", FormatNumber(value->m_fl64Value), true };
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 		// Every convar is a string there, which can have a min and max
 		case EConVarType_String:
 			return { "string", value->m_StringValue.m_pString ? value->m_StringValue.m_pString : "", true };
@@ -330,7 +336,7 @@ static const SchemaEnumInfoData_t* GetEnum(const ConVarValueInfo_t& info)
 	return reinterpret_cast<CustomDataEnum_t (*)()>(info.m_fnCustomData)().m_pEnum;
 }
 
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 // A changed layout can still match the signature, so check what is read from the list before using it.
 // Returns what is invalid, or null.
 static const char* ValidateListed(const CModule& module, const ConCommandBase* base)
@@ -566,7 +572,7 @@ static uint64 GetModuleRegisterFlags(const char* module)
 // modules gets the modules that declare it
 static QueuedEntry_t MergeQueued(const std::vector<QueuedEntry_t*>& entries, std::set<std::string>& modules)
 {
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 	constexpr uint64 laterWins = 0;
 	constexpr uint64 stripped = 0;
 #else

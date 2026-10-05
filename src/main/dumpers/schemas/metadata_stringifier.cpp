@@ -45,7 +45,24 @@ namespace Dumpers::Schemas
 
 bool g_bInvalidKV3Defaults = false;
 
+#ifdef GAME_STEAMPAL
+// SteamPal's defaults functions fill a KeyValues3 instead of returning one.
+// It starts out null, with the lowest bit set so it isn't looked up as part of a cluster.
+typedef bool (*GetKV3DefaultsFn)(void* kv3);
+
+static void* RunKV3Defaults(GetKV3DefaultsFn fn)
+{
+	auto kv3 = new uint64_t[2]{ 1, 0 };
+	return fn(kv3) ? new void*(kv3) : nullptr;
+}
+#else
 typedef void* (*GetKV3DefaultsFn)();
+
+static void* RunKV3Defaults(GetKV3DefaultsFn fn)
+{
+	return fn();
+}
+#endif
 
 // GetKV3Defaults serializes a default constructed object on the stack, so fields the constructor does not initialize
 // contain whatever was on the stack. Each call runs on a newly allocated stack, which is always zeroed.
@@ -60,7 +77,7 @@ struct KV3DefaultsCall
 static void CALLBACK KV3DefaultsFiber(void* param)
 {
 	auto call = static_cast<KV3DefaultsCall*>(param);
-	call->result = call->fn();
+	call->result = RunKV3Defaults(call->fn);
 	SwitchToFiber(call->returnFiber);
 }
 
@@ -88,7 +105,7 @@ static void* g_KV3DefaultsResult;
 
 static void KV3DefaultsContext()
 {
-	g_KV3DefaultsResult = g_KV3DefaultsFn();
+	g_KV3DefaultsResult = RunKV3Defaults(g_KV3DefaultsFn);
 }
 
 static void* CallKV3Defaults(GetKV3DefaultsFn fn)

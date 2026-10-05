@@ -35,3 +35,8 @@
 	url = https://github.com/ValveResourceFormat/hl2sdk
 	branch = steamvr
 	shallow = true
+[submodule "hl2sdk-steampal"]
+	path = vendor/hl2sdk-steampal
+	url = https://github.com/ValveResourceFormat/hl2sdk
+	branch = steampal
+	shallow = true

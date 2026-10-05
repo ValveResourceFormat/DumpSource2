@@ -26,6 +26,7 @@ build_game(DOTA dota DOTA)
 build_game(DEADLOCK citadel CS2)
 build_game(HLVR hlvr HLVR)
 build_game(STEAMVR steamtours STEAMVR)
+build_game(STEAMPAL steampal STEAMPAL)
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Source Files" FILES ${SOURCES_LIST})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Header Files" FILES ${HEADERS_LIST})

@@ -92,7 +92,7 @@ struct ModuleFile
 	std::string file;
 };
 
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 // Copies the module into a temporary folder with its .rdata section made writable, and points module at the copy
 static bool UseCopyWithWritableRdata(ModuleFile& module)
 {
@@ -180,7 +180,7 @@ void InitializeModules()
 	std::string failed;
 	for (auto& module : modules)
 	{
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 		if (g_ModulesWritingToRdata.contains(module.name) && !UseCopyWithWritableRdata(module))
 			spdlog::warn("{} has no .rdata section, loading it as is", module.name);
 #endif

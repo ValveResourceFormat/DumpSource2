@@ -38,13 +38,13 @@ namespace GameData
 //-----------------------------------------------------------------------------
 
 // Modules that link tier1 contain this string, others can't have convars or schemas and are only loaded if they are app systems
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 inline constexpr const char* g_Tier1ModuleMarker = ") defined with infinite float";
 #else
 inline constexpr const char* g_Tier1ModuleMarker = "RegisterConVar: Unknown error";
 #endif
 
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 // Their static initializers write to .rdata, so they fail to load (error 1114). A copy with a writable .rdata is loaded instead.
 inline const std::unordered_set<std::string> g_ModulesWritingToRdata = { "tools/hammer", "tools/model_editor" };
 #endif
@@ -209,6 +209,13 @@ inline const std::unordered_map<std::string, std::unordered_set<std::string>> g_
 	{ "dynpitchvol_base_t", { "pitchfrac", "vol" } },
 	{ "dynpitchvol_t", { "pitchfrac", "vol" } },
 	{ "vphysics_save_ragdoll_control_t", { "m_vLinearVelocityAccumulator" } },
+#ifdef GAME_STEAMPAL
+	{ "CAuthPhysBody", { "m_uuid" } },
+	{ "CAuthPhysJoint", { "m_uuid" } },
+	{ "CAuthPhysShape", { "m_uuid" } },
+	{ "CChoiceAnimNode", { "m_seed" } },
+	{ "CommandToolCommand_t", { "m_InternalId" } },
+#endif
 };
 
 //-----------------------------------------------------------------------------
@@ -232,7 +239,7 @@ inline constexpr size_t g_CreateInterfaceListOffset = 0x10;
 
 // Signatures of the list append code, starting at the list head load.
 // To update, find the list allocation (sizeof(ConVarRegList)) in tier0. The code is only linked into modules that declare any.
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 // Half-Life: Alyx has one ConCommandBase::s_pConCommandBases list for both, this is the insert in ConCommandBase's constructors
 inline const byte g_ConCommandBaseListSignature[] = "\x48\x8B\x05\x2A\x2A\x2A\x2A\x48\x89\x41\x08\x48\x89\x0D\x2A\x2A\x2A\x2A\xEB\x08\x48\xC7\x41\x08\x00\x00\x00\x00";
 #elif defined(_WIN32)
