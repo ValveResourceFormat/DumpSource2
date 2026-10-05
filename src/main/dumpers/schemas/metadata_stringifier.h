@@ -25,7 +25,7 @@
 #include <schemasystem/schemasystem.h>
 #include "schemas.h"
 
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 // Values of network metadata, which older games keep in their schemas
 struct CSchemaVarName
 {

@@ -37,7 +37,7 @@ enum class MetadataValueType
 	COLOR,
 	FUNCTION,
 	KV3DEFAULTS,
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 	FLOAT,
 	VARNAME,
 	NETWORK_OVERRIDE,
@@ -125,6 +125,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MSmartPropClassVersion", MetadataValueType::INTEGER },
 	{ "MVDataNodeType", MetadataValueType::INTEGER },
 	{ "MVDataOverlayType", MetadataValueType::INTEGER },
+	{ "MVDataPromoteAsChildNodes", MetadataValueType::INTEGER },
 	{ "MVDataPromoteField", MetadataValueType::INTEGER },
 	{ "MSaveBehavior", MetadataValueType::INTEGER },
 	{ "MPropertyFlattenStretchFactor", MetadataValueType::INTEGER },
@@ -141,6 +142,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MDebugSnapshotDataSummaryFn", MetadataValueType::FUNCTION },
 	{ "MParticleCustomFieldDefaultValue", MetadataValueType::FUNCTION },
 	{ "MPropertyAttrChangeCallback", MetadataValueType::FUNCTION },
+	{ "MPropertyAttrExtraInfoFn", MetadataValueType::FUNCTION },
 	{ "MPropertyAttrStateCallback", MetadataValueType::FUNCTION },
 	{ "MPropertyChoiceProviderFn", MetadataValueType::FUNCTION },
 	{ "MPropertyEditClassAsString", MetadataValueType::FUNCTION },
@@ -158,7 +160,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	// KV3
 	{ "MGetKV3ClassDefaults", MetadataValueType::KV3DEFAULTS },
 
-#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
 	// Network metadata, which older games keep in their schemas
 	{ "MNetworkAlias", MetadataValueType::STRING },
 	{ "MNetworkChangeCallback", MetadataValueType::STRING },

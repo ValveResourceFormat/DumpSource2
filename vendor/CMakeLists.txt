@@ -23,6 +23,7 @@ build_hl2sdk(DOTA hl2sdk-dota)
 build_hl2sdk(DEADLOCK hl2sdk-deadlock)
 build_hl2sdk(HLVR hl2sdk-hlvr)
 build_hl2sdk(STEAMVR hl2sdk-steamvr)
+build_hl2sdk(STEAMPAL hl2sdk-steampal)
 
 # EXTERNAL LIBRARIES
 # ---
