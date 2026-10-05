@@ -128,7 +128,12 @@ const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
 }
 
 #if defined(GAME_HLVR) || defined(GAME_STEAMVR) || defined(GAME_STEAMPAL)
-// Half-Life: Alyx has no info tag flags, it keeps them in the metadata
+// These games number the info tag flags differently and name none of them. Bit 9 is inferred: current games mark the same
+// classes MNetworkNoBase, apart from CGameRules which no longer has it. Bits 10 to 12 are also used, with no known meaning.
+static constexpr std::pair<uint32, const char*> g_ClassInfoTagFlags[] = {
+	{ 1u << 9, "MNetworkNoBase" },
+};
+
 static constexpr std::pair<uint32, const char*> g_ClassFlags[] = {
 	{ SCHEMA_CF1_IS_ABSTRACT, "abstract" },
 	{ SCHEMA_CF1_HAS_TRIVIAL_CONSTRUCTOR, "trivial_constructor" },
@@ -203,13 +208,11 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 			schemaClass.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName, classInfo));
 		}
 
-#if !defined(GAME_HLVR) && !defined(GAME_STEAMVR) && !defined(GAME_STEAMPAL)
 		for (const auto& [flag, name] : g_ClassInfoTagFlags)
 		{
 			if (classInfo->m_nFlags1 & flag)
 				schemaClass.metadata.push_back({ .name = name, .hasValue = false });
 		}
-#endif
 
 		for (uint16_t baseIndex = 0; baseIndex < classInfo->m_nBaseClassCount; ++baseIndex)
 		{
