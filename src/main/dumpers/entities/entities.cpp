@@ -53,7 +53,7 @@ namespace Dumpers::Entities
 {
 
 // Older games don't have this entity system
-#ifndef GAME_HLVR
+#if !defined(GAME_HLVR) && !defined(GAME_STEAMVR)
 
 using namespace GameData;
 

@@ -37,7 +37,7 @@ enum class MetadataValueType
 	COLOR,
 	FUNCTION,
 	KV3DEFAULTS,
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 	FLOAT,
 	VARNAME,
 	NETWORK_OVERRIDE,
@@ -158,7 +158,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	// KV3
 	{ "MGetKV3ClassDefaults", MetadataValueType::KV3DEFAULTS },
 
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 	// Network metadata, which older games keep in their schemas
 	{ "MNetworkAlias", MetadataValueType::STRING },
 	{ "MNetworkChangeCallback", MetadataValueType::STRING },

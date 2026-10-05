@@ -38,19 +38,19 @@ namespace GameData
 //-----------------------------------------------------------------------------
 
 // Modules that link tier1 contain this string, others can't have convars or schemas and are only loaded if they are app systems
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 inline constexpr const char* g_Tier1ModuleMarker = ") defined with infinite float";
 #else
 inline constexpr const char* g_Tier1ModuleMarker = "RegisterConVar: Unknown error";
 #endif
 
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 // Their static initializers write to .rdata, so they fail to load (error 1114). A copy with a writable .rdata is loaded instead.
 inline const std::unordered_set<std::string> g_ModulesWritingToRdata = { "tools/hammer", "tools/model_editor" };
 #endif
 
 // The module that exposes ICvar
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 inline constexpr const char* g_CvarModule = "vstdlib";
 #else
 inline constexpr const char* g_CvarModule = "tier0";
@@ -66,7 +66,7 @@ struct AppSystemInfo_t
 // App systems that get connected (but not initialized) to fill in module interface globals used by KV3 defaults.
 // Not listed: toolframework2 hangs when connecting, rendersystemempty/vulkan are alternatives to dx11.
 // This is also the module load order, which decides which convar declaration wins when declared by multiple modules.
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 // Half-Life: Alyx has no KV3 defaults, so nothing needs connecting
 inline const std::vector<AppSystemInfo_t> g_AppSystems{};
 #else
@@ -232,7 +232,7 @@ inline constexpr size_t g_CreateInterfaceListOffset = 0x10;
 
 // Signatures of the list append code, starting at the list head load.
 // To update, find the list allocation (sizeof(ConVarRegList)) in tier0. The code is only linked into modules that declare any.
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 // Half-Life: Alyx has one ConCommandBase::s_pConCommandBases list for both, this is the insert in ConCommandBase's constructors
 inline const byte g_ConCommandBaseListSignature[] = "\x48\x8B\x05\x2A\x2A\x2A\x2A\x48\x89\x41\x08\x48\x89\x0D\x2A\x2A\x2A\x2A\xEB\x08\x48\xC7\x41\x08\x00\x00\x00\x00";
 #elif defined(_WIN32)
@@ -244,7 +244,7 @@ inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\x
 #endif
 
 // Modules that always declare both, not finding their queues means the signatures are outdated
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 inline const std::unordered_set<std::string> g_RequiredQueueModules = { "vstdlib", "engine2", "client", "server" };
 #else
 inline const std::unordered_set<std::string> g_RequiredQueueModules = { "tier0", "engine2", "client", "server" };

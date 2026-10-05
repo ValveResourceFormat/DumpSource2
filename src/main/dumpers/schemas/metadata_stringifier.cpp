@@ -244,7 +244,7 @@ static std::string DescribeUnknownMetadata(const void* data)
 	return description;
 }
 
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 static bool IsNameSet(const char* name)
 {
 	return name != nullptr;
@@ -341,7 +341,7 @@ static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData
 			}
 			return fmt::format("\"{}\"", std::string(result, 8));
 		}
-#ifdef GAME_HLVR
+#if defined(GAME_HLVR) || defined(GAME_STEAMVR)
 		case MetadataValueType::FLOAT:
 			return std::to_string(*static_cast<float*>(entry.m_pData));
 		case MetadataValueType::USER_GROUP_SEND_PROXY_RECIPIENTS_FILTER:
