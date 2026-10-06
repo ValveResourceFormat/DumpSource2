@@ -25,26 +25,6 @@
 #include <schemasystem/schematypes.h>
 #include "schemas.h"
 
-struct CSchemaVarName
-{
-	const char* m_pszName;
-	const char* m_pszType;
-};
-
-struct CSchemaNetworkOverride
-{
-	const char* m_pszClassName;
-	const char* m_pszFieldName;
-};
-
-struct CSchemaSendProxyRecipientsFilter
-{
-	void* unk;
-	void* filterFunction;
-	const char* m_pszName;
-	void* unk2;
-};
-
 namespace Dumpers::Schemas
 {
 

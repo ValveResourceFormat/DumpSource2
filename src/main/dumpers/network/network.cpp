@@ -118,22 +118,29 @@ static json GetStrings(const CUtlVector<CUtlString>& strings)
 	return array;
 }
 
-// A member at an offset from gamedata.h, which the SDK types don't have
-template <typename T>
-static const T& GetMember(const void* object, size_t offset)
-{
-	return *reinterpret_cast<const T*>(static_cast<const uint8_t*>(object) + offset);
-}
-
+// OOPVSUpdates_Default defers to the bases and the enclosing struct
 static json GetOutOfPVSUpdates(int value)
 {
-	return value != g_NetworkOutOfPVSUpdatesDefault ? json(value) : json();
+	return value != OOPVSUpdates_Default ? json(value) : json();
 }
 
 static json GetFloat(float value)
 {
 	return json::parse(FormatFloat(value));
 }
+
+// What a NetworkOverride_t changes of the base class field, by its type
+static const std::unordered_map<int, std::string> g_NetworkOverrideKinds = {
+	{ MNetworkSerializer, "serializer" },
+	{ MNetworkEncoder, "encoder" },
+	{ MNetworkChangeCallback, "changeCallback" },
+	{ MNetworkChangeTag, "changeTag" },
+	{ MNetworkBitCount, "bitCount" },
+	{ MNetworkUserGroup, "userGroup" },
+	{ MNetworkPriority, "priority" },
+	{ MNetworkOutOfPVSUpdates, "outOfPVSUpdates" },
+	{ MNetworkRemoveAll, "removeAll" },
+};
 
 static std::string GetOverrideKind(int kind)
 {
@@ -155,7 +162,7 @@ static std::vector<Property_t> GetClassProperties(const CNetworkSerializerClassI
 	{
 		const auto* networkOverride = info->m_NetworkOverrides[i];
 		const auto* fieldName = networkOverride->m_FieldName ? networkOverride->m_FieldName : "";
-		json item{ { "field", fieldName }, { "kind", GetOverrideKind(networkOverride->m_unk001) } };
+		json item{ { "field", fieldName }, { "kind", GetOverrideKind(networkOverride->m_Type) } };
 		auto text = fieldName + std::string(" ") + item["kind"].get<std::string>();
 
 		// No class is the nearest base that has the field
@@ -165,10 +172,10 @@ static std::vector<Property_t> GetClassProperties(const CNetworkSerializerClassI
 			text = networkOverride->m_ParentClass + std::string("::") + text;
 		}
 
-		if (networkOverride->m_FieldPriority)
+		if (networkOverride->m_Value)
 		{
-			item["value"] = networkOverride->m_FieldPriority;
-			text += std::string(" ") + networkOverride->m_FieldPriority;
+			item["value"] = networkOverride->m_Value;
+			text += std::string(" ") + networkOverride->m_Value;
 		}
 
 		overrides.push_back(std::move(item));
@@ -204,7 +211,7 @@ static std::vector<Property_t> GetClassProperties(const CNetworkSerializerClassI
 
 	Add(properties, "varsAtomic", "vars atomic", info->m_NetworkVarsAtomic);
 	Add(properties, "structNotInNetworkUtlVectorEmbedded", "struct not in network utl vector embedded", info->m_NetworkStructNotInNetworkUtlVectorEmbedded);
-	Add(properties, "notFlattened", "not flattened", GetMember<bool>(info, g_NetworkClassNotFlattenedOffset));
+	Add(properties, "notFlattened", "not flattened", info->m_NetworkVarEmbeddedNotFlattened);
 	Add(properties, "outOfPVSUpdates", "out of PVS updates", GetOutOfPVSUpdates(info->m_NetworkOutOfPVSUpdates));
 	return properties;
 }
@@ -225,8 +232,8 @@ static std::vector<Property_t> GetFieldProperties(const CNetworkSerializerFieldI
 	Add(properties, "serializer", "serializer", field->m_NetworkSerializer.Get());
 	Add(properties, "encoder", "encoder", field->m_NetworkEncoder.Get());
 
-	const auto* filter = reinterpret_cast<const SendProxyRecipientsFilter_t*>(field->m_NetworkSendProxyRecipientsFilter.get());
-	Add(properties, "recipientsFilter", "recipients filter", filter ? filter->m_Name.Get() : "");
+	const auto& filter = field->m_NetworkSendProxyRecipientsFilter;
+	Add(properties, "recipientsFilter", "recipients filter", filter ? filter->m_FilterName.Get() : "");
 
 	const auto& changePointerCallback = field->m_NetworkChangePointerCallback;
 	Add(properties, "changePointerCallback", "change pointer callback", changePointerCallback ? changePointerCallback->m_CallbackName.Get() : "");
@@ -234,16 +241,16 @@ static std::vector<Property_t> GetFieldProperties(const CNetworkSerializerFieldI
 	Add(properties, "priority", "priority", field->m_NetworkPriority != 64 ? json(field->m_NetworkPriority) : json());
 	Add(properties, "userGroups", "user groups", GetStrings(field->m_NetworkIncludeByUserGroup));
 	Add(properties, "changeCallbacks", "change callbacks", GetStrings(field->m_NetworkChangeCb));
-	Add(properties, "changeTags", "change tags", GetStrings(GetMember<CUtlVector<CUtlString>>(field, g_NetworkChangeTagsOffset)));
+	Add(properties, "changeTags", "change tags", GetStrings(field->m_NetworkChangeTags));
 	Add(properties, "bitCount", "bit count", field->m_NetworkBitCount != 32 ? json(field->m_NetworkBitCount) : json());
 	Add(properties, "encodeFlags", "encode flags", field->m_NetworkEncodeFlags ? json(field->m_NetworkEncodeFlags) : json());
 	Add(properties, "min", "min", field->m_NetworkMin != -FLT_MAX ? GetFloat(field->m_NetworkMin) : json());
 	Add(properties, "max", "max", field->m_NetworkMax != FLT_MAX ? GetFloat(field->m_NetworkMax) : json());
 	Add(properties, "embeddedFieldOffsetDelta", "embedded field offset delta", field->m_NetworkVarEmbeddedFieldOffsetDelta ? json(field->m_NetworkVarEmbeddedFieldOffsetDelta) : json());
 
-	Add(properties, "outOfPVSUpdates", "out of PVS updates", GetOutOfPVSUpdates(GetMember<int>(field, g_NetworkFieldOutOfPVSUpdatesOffset)));
-	Add(properties, "notFlattened", "not flattened", GetMember<bool>(field, g_NetworkFieldNotFlattenedOffset));
-	Add(properties, "polymorphic", "polymorphic", GetMember<bool>(field, g_NetworkPolymorphicOffset));
+	Add(properties, "outOfPVSUpdates", "out of PVS updates", GetOutOfPVSUpdates(field->m_NetworkOutOfPVSUpdates));
+	Add(properties, "notFlattened", "not flattened", field->m_NetworkVarEmbeddedNotFlattened);
+	Add(properties, "polymorphic", "polymorphic", field->m_NetworkPolymorphic);
 
 	Add(properties, "resourceType", "resource type", std::string(field->m_ResourceTypeForInfoType, strnlen(field->m_ResourceTypeForInfoType, sizeof(field->m_ResourceTypeForInfoType))));
 	return properties;
@@ -293,15 +300,15 @@ static CNetworkSerializerCodeGenDatabase* RunRegistrations(CModule& module)
 	return database;
 }
 
-// Members read at offsets that are not in the SDK are checked to be what they can be, so a changed layout fails the dump
-static bool IsBool(const void* object, size_t offset)
+// Members are checked to be what they can be, so a changed layout fails the dump
+static bool IsBool(const bool& value)
 {
-	return GetMember<uint8_t>(object, offset) <= 1;
+	return *reinterpret_cast<const uint8_t*>(&value) <= 1;
 }
 
 static bool IsOutOfPVSUpdates(int value)
 {
-	return value >= 0 && value <= g_NetworkOutOfPVSUpdatesDefault;
+	return value >= OOPVSUpdates_OptOut && value <= OOPVSUpdates_Default;
 }
 
 // Names copied into CUtlStrings, which aren't in a module like the names Modules::IsValidName checks
@@ -328,7 +335,7 @@ static bool ReadClasses(const char* module, const CNetworkSerializerCodeGenDatab
 		const auto* info = database->m_ClassInfos.Element(i);
 		const auto* name = database->m_ClassInfos.GetElementName(i);
 		if (!info || info->m_pDatabase != database || strcmp(info->m_pszClassName.Get(), name) || info->m_nClassSize <= 0 ||
-			!IsBool(info, g_NetworkClassNotFlattenedOffset))
+			!IsBool(info->m_NetworkVarEmbeddedNotFlattened))
 		{
 			spdlog::critical("Network class {} in {} does not match, CNetworkSerializerClassInfo in the SDK needs updating", name, module);
 			return false;
@@ -346,9 +353,9 @@ static bool ReadClasses(const char* module, const CNetworkSerializerCodeGenDatab
 		{
 			const auto* field = info->m_Fields[f];
 			if (!field || !field->m_pszFieldName.Get()[0] || field->m_nFieldOffset < 0 || field->m_nFieldOffset >= info->m_nClassSize ||
-				!IsBool(field, g_NetworkPolymorphicOffset) || !IsBool(field, g_NetworkFieldNotFlattenedOffset) ||
-				!IsOutOfPVSUpdates(GetMember<int>(field, g_NetworkFieldOutOfPVSUpdatesOffset)) ||
-				!IsNameList(GetMember<CUtlVector<CUtlString>>(field, g_NetworkChangeTagsOffset)))
+				!IsBool(field->m_NetworkPolymorphic) || !IsBool(field->m_NetworkVarEmbeddedNotFlattened) ||
+				!IsOutOfPVSUpdates(field->m_NetworkOutOfPVSUpdates) ||
+				!IsNameList(field->m_NetworkChangeTags))
 			{
 				spdlog::critical("Network field {} of {} in {} does not match, CNetworkSerializerFieldInfo in the SDK needs updating", f, name, module);
 				return false;

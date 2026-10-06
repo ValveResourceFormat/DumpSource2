@@ -22,7 +22,7 @@ endfunction()
 
 # build_game(GAME, GAME_PATH, SDK) - SDK selects which vendor/hl2sdk-* to link
 build_game(CS2 csgo CS2)
-build_game(DOTA dota DOTA)
+build_game(DOTA dota CS2)
 build_game(DEADLOCK citadel CS2)
 
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "Source Files" FILES ${SOURCES_LIST})

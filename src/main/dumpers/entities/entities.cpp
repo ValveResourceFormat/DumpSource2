@@ -49,8 +49,8 @@
 namespace Dumpers::Entities
 {
 
-// Other games don't have this entity system yet, and their SDKs have the older entity and datamap layouts
-// TODO: Enable for a game when it and its SDK have this entity system
+// Dota doesn't have this entity system yet
+// TODO: Enable for Dota when it has this entity system
 #ifndef GAME_DOTA
 
 using namespace GameData;

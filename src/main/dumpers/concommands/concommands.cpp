@@ -268,21 +268,9 @@ static Queue_t g_ConCommandQueue{ "concommand", "ConCommandRegList", "commands.t
 static std::set<std::string> g_CollectedModules;
 static std::map<std::string, const SchemaEnumInfoData_t*> g_EnumConVars;
 
-// The custom data of enum_value convars is their schema enum, returned wrapped in a struct rather than as the void* of
-// FnCustomData_t in the SDK. The constructor makes MSVC return it through memory like the game does, gcc and clang in a register.
-// TODO: Use FnCustomData_t when the SDK has it return a struct
-struct CustomDataEnum_t
-{
-	CustomDataEnum_t() {}
-	const SchemaEnumInfoData_t* m_pEnum;
-};
-
 static const SchemaEnumInfoData_t* GetEnum(const ConVarValueInfo_t& info)
 {
-	if (!info.m_fnCustomData)
-		return nullptr;
-
-	return reinterpret_cast<CustomDataEnum_t (*)()>(info.m_fnCustomData)().m_pEnum;
+	return info.m_fnGetEnumInfoHandle ? info.m_fnGetEnumInfoHandle().Get() : nullptr;
 }
 
 static QueuedEntry_t CopyQueued(const char* module, const ConVarRegList::Entry_t& queued)
@@ -328,14 +316,14 @@ static const char* ValidateQueued(const ConVarRegList::Entry_t& queued)
 			return "has value flags";
 	}
 
-	if (info.m_fnCustomData)
+	if (info.m_fnGetEnumInfoHandle)
 	{
-		if (!Modules::FindModuleContaining((const void*)info.m_fnCustomData))
-			return "custom data function";
+		if (!Modules::FindModuleContaining((const void*)info.m_fnGetEnumInfoHandle))
+			return "enum info function";
 
 		auto enumInfo = GetEnum(info);
 		if (!Modules::FindModuleContaining(enumInfo) || !Modules::IsValidName(enumInfo->m_pszName))
-			return "custom data enum";
+			return "enum info";
 	}
 
 	return nullptr;

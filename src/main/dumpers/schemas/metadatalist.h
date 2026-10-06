@@ -33,14 +33,10 @@ enum class MetadataValueType
 	STRING,
 	INLINE_STRING,
 	INTEGER,
-	FLOAT,
 	BOOL,
 	COLOR,
 	FUNCTION,
-	VARNAME,
-	NETWORK_OVERRIDE,
 	KV3DEFAULTS,
-	SEND_PROXY_RECIPIENTS_FILTER,
 };
 
 inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
@@ -52,19 +48,6 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MFgdHelper", MetadataValueType::STRING },
 	{ "MFieldVerificationName", MetadataValueType::STRING },
 	{ "MKV3TransferName", MetadataValueType::STRING },
-	{ "MNetworkAlias", MetadataValueType::STRING },
-	{ "MNetworkChangeCallback", MetadataValueType::STRING },
-	{ "MNetworkChangePointerCallback", MetadataValueType::STRING },
-	{ "MNetworkEncoder", MetadataValueType::STRING },
-	{ "MNetworkExcludeByName", MetadataValueType::STRING },
-	{ "MNetworkExcludeByUserGroup", MetadataValueType::STRING },
-	{ "MNetworkIncludeByName", MetadataValueType::STRING },
-	{ "MNetworkIncludeByUserGroup", MetadataValueType::STRING },
-	{ "MNetworkReplayCompatField", MetadataValueType::STRING },
-	{ "MNetworkSerializer", MetadataValueType::STRING },
-	{ "MNetworkTypeAlias", MetadataValueType::STRING },
-	{ "MNetworkUserGroup", MetadataValueType::STRING },
-	{ "MNetworkUserGroupProxy", MetadataValueType::STRING },
 	{ "MParticleReplacementOp", MetadataValueType::STRING },
 	{ "MPropertyArrayElementNameKey", MetadataValueType::STRING },
 	{ "MPropertyAttributeChoiceName", MetadataValueType::STRING },
@@ -124,10 +107,6 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	// INTEGER
 	{ "MAlignment", MetadataValueType::INTEGER },
 	{ "MGenerateArrayKeynamesFirstIndex", MetadataValueType::INTEGER },
-	{ "MNetworkBitCount", MetadataValueType::INTEGER },
-	{ "MNetworkEncodeFlags", MetadataValueType::INTEGER },
-	{ "MNetworkPriority", MetadataValueType::INTEGER },
-	{ "MNetworkVarEmbeddedFieldOffsetDelta", MetadataValueType::INTEGER },
 	{ "MParticleMaxVersion", MetadataValueType::INTEGER },
 	{ "MParticleMinVersion", MetadataValueType::INTEGER },
 	{ "MParticleOperatorType", MetadataValueType::INTEGER },
@@ -141,10 +120,6 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MSaveBehavior", MetadataValueType::INTEGER },
 	{ "MPropertyFlattenStretchFactor", MetadataValueType::INTEGER },
 	{ "MPropertyResizable", MetadataValueType::INTEGER },
-
-	// FLOAT
-	{ "MNetworkMaxValue", MetadataValueType::FLOAT },
-	{ "MNetworkMinValue", MetadataValueType::FLOAT },
 
 	// BOOL
 	{ "MVDataOutlinerDefaultExpanded", MetadataValueType::BOOL },
@@ -167,18 +142,8 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MVDataPreLoadFixupFn", MetadataValueType::FUNCTION },
 	{ "MVDataVirtualNodeFactoryFn", MetadataValueType::FUNCTION },
 
-	// VARNAME
-	{ "MNetworkVarNames", MetadataValueType::VARNAME },
-	{ "MNetworkVarTypeOverride", MetadataValueType::VARNAME },
-
-	// NETWORK_OVERRIDE
-	{ "MNetworkOverride", MetadataValueType::NETWORK_OVERRIDE },
-
 	// KV3
 	{ "MGetKV3ClassDefaults", MetadataValueType::KV3DEFAULTS },
-
-	// MISC
-	{ "MNetworkSendProxyRecipientsFilter", MetadataValueType::SEND_PROXY_RECIPIENTS_FILTER },
 };
 
 } // namespace Dumpers::Schemas
