@@ -9,7 +9,7 @@ DumpSource2 loads a Source 2 game's modules without running the game and dumps w
 - `src/main/gamedata.h` holds everything that changes with game updates: signatures, struct offsets the SDK doesn't have, and lists of special cases. Each signature's comment says how to find it again, by an engine string or nearby code, never by address.
 - `src/main/dumpers/<name>` has one dumper each, most writing a text file for GameTracking and part of `schemas.json`.
 - `src/main/utils` comes from another project; leave it as is, except for stubs the SDK needs to link.
-- `vendor/hl2sdk-*` are the upstream [alliedmodders/hl2sdk](https://github.com/alliedmodders/hl2sdk) branches. `build_game` in `src/main/CMakeLists.txt` picks one per game target, not necessarily the game's own.
+- `vendor/hl2sdk-*` are the upstream [alliedmodders/s2sdk](https://github.com/alliedmodders/s2sdk) branches. `build_game` in `src/main/CMakeLists.txt` picks one per game target, not necessarily the game's own.
 - Only current game builds are supported: older ones fail loudly instead of getting compatibility code. A one-off dump of an older engine lives on its own branch with a forked SDK.
 
 ## Reading game memory
