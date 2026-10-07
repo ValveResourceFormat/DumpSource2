@@ -49,10 +49,6 @@
 namespace Dumpers::Entities
 {
 
-// Dota doesn't have this entity system yet
-// TODO: Enable for Dota when it has this entity system
-#ifndef GAME_DOTA
-
 using namespace GameData;
 
 // An input or output as an FGD line and for schemas.json
@@ -779,13 +775,18 @@ static const char* ValidateEntityClass(const CModule& module, const CEntityClass
 	if (!Modules::IsInModule(module, classInfo) || classInfo->m_pClass != entityClass)
 		return "class info";
 
-	if (!Modules::IsValidName(classInfo->m_pszCPPClassname))
+	// Can be empty, like Dota's dota_minimap_boundary, then the design name is the only name
+	auto cppName = classInfo->m_pszCPPClassname;
+	if (!Modules::FindModuleContaining(cppName) || (cppName[0] && !Modules::IsValidName(cppName)))
 		return "class name";
 
 	// Classes without a design name can't be created by name
 	auto designName = classInfo->m_pszClassname;
 	if (designName && (!Modules::FindModuleContaining(designName) || (designName[0] && !Modules::IsValidName(designName))))
 		return "design name";
+
+	if (!cppName[0] && !(designName && designName[0]))
+		return "class name";
 
 	for (auto base = classInfo->m_pBaseClassInfo; base; base = base->m_pBaseClassInfo)
 	{
@@ -1268,8 +1269,9 @@ bool Dump()
 
 			output << "]\n\n";
 
-			Globals::stringsIgnoreStream << designName << "\n"
-										 << classInfo->m_pszCPPClassname << "\n";
+			Globals::stringsIgnoreStream << designName << "\n";
+			if (classInfo->m_pszCPPClassname[0])
+				Globals::stringsIgnoreStream << classInfo->m_pszCPPClassname << "\n";
 
 			for (const auto& str : entityClass.m_Strings)
 				Globals::stringsIgnoreStream << str << "\n";
@@ -1299,15 +1301,5 @@ bool Dump()
 	Globals::schemasJson["entities"] = GetEntitiesJson(entities);
 	return true;
 }
-
-#else
-
-bool Dump()
-{
-	spdlog::info("Entities are not supported in this game yet");
-	return true;
-}
-
-#endif
 
 } // namespace Dumpers::Entities
