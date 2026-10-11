@@ -34,6 +34,7 @@
 
 #include <fmt/format.h>
 #include <sstream>
+#include <string>
 #include <unordered_set>
 
 // Each name once, dumpers add the same names many times (like field names)
@@ -53,6 +54,29 @@ static bool WriteStringsIgnore()
 	return CloseOutput(file, path);
 }
 
+// JavaScript reads JSON numbers as doubles, so integers beyond 2^53 - 1 either way are written as strings of their exact digits
+static void QuoteUnsafeIntegers(nlohmann::ordered_json& value)
+{
+	constexpr int64_t maxSafeInteger = (1ll << 53) - 1;
+
+	if (value.is_structured())
+	{
+		for (auto& item : value)
+			QuoteUnsafeIntegers(item);
+	}
+	else if (value.is_number_unsigned())
+	{
+		if (value.get<uint64_t>() > static_cast<uint64_t>(maxSafeInteger))
+			value = std::to_string(value.get<uint64_t>());
+	}
+	else if (value.is_number_integer())
+	{
+		auto integer = value.get<int64_t>();
+		if (integer > maxSafeInteger || integer < -maxSafeInteger)
+			value = std::to_string(integer);
+	}
+}
+
 static bool WriteSchemasJson()
 {
 	nlohmann::ordered_json root;
@@ -69,6 +93,8 @@ static bool WriteSchemasJson()
 
 	for (const auto& [name, section] : Globals::schemasJson)
 		root[name] = section;
+
+	QuoteUnsafeIntegers(root);
 
 	const auto path = Globals::outputPath / "schemas.json";
 	std::ofstream output(path);
