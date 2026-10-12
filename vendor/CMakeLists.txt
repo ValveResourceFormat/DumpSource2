@@ -12,7 +12,6 @@ function(BUILD_HL2SDK GAME SDK_PATH)
 		${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/public/tier1
 	)
 
-	target_sources(HL2SDK-${GAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/interfaces/interfaces.cpp)
 
 	# tier0 is not linked, so its functions are declared without dllimport for the stubs in common.cpp
 	target_compile_definitions(HL2SDK-${GAME} INTERFACE STATIC_TIER0)

@@ -170,8 +170,6 @@ bool InitializeSchemas()
 		return false;
 	}
 
-	// schemasystem needs ICvar when connecting
-	g_pCVar = Interfaces::cvar;
 	if (!Interfaces::cvar->Connect(Modules::tier0->GetFactory()))
 	{
 		spdlog::critical("Failed to connect {}", CVAR_INTERFACE_VERSION);

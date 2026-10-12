@@ -23,11 +23,7 @@ void ExitError(const char* pMsg, ...)
 
 // tier0 is not linked: the SDK's declarations of it go out of date when the game updates, and calling them would crash
 // instead of failing on a validated read. So memory the game allocates is never freed, as that needs tier0's allocator,
-// and what the SDK code calls is stubbed: Plat_ExitProcess from interfaces.cpp, LoggingSystem_LogAssert from asserts in debug builds.
-
-void Plat_ExitProcess(int) {
-	// STUB
-}
+// and what the SDK headers call is stubbed, like LoggingSystem_LogAssert from asserts in debug builds.
 
 LoggingResponse_t LoggingSystem_LogAssert(const char* pMessageFormat, ...)
 {
