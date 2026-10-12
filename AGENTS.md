@@ -8,7 +8,7 @@ DumpSource2 loads a Source 2 game's modules without running the game and dumps w
 
 - `src/main/gamedata.h` holds everything that changes with game updates: signatures, struct offsets the SDK doesn't have, and lists of special cases. Each signature's comment says how to find it again, by an engine string or nearby code, never by address.
 - `src/main/dumpers/<name>` has one dumper each, most writing a text file for GameTracking and part of `schemas.json`.
-- `src/main/utils` comes from another project; leave it as is, except for stubs the SDK needs to link.
+- `src/main/utils` comes from another project; leave it as is, except for the tier0 stubs the SDK code needs to link and the `Simple*` types.
 - `vendor/hl2sdk-*` are the upstream [alliedmodders/s2sdk](https://github.com/alliedmodders/s2sdk) branches. `build_game` in `src/main/CMakeLists.txt` picks one per game target, not necessarily the game's own.
 - Only current game builds are supported: older ones fail loudly instead of getting compatibility code. A one-off dump of an older engine lives on its own branch with a forked SDK.
 
@@ -20,7 +20,7 @@ DumpSource2 loads a Source 2 game's modules without running the game and dumps w
 - Outdated SDK structs still compile and run, reading garbage. Validate every read (valid names, counts in range, bools 0 or 1, pointers into a module) and fail with `spdlog::critical` naming what to update. A failed dump exits with 1 without writing `schemas.json`, so GameTracking keeps the previous one.
 - Stay loud: don't catch crashes or exceptions to keep a dump going. List a class whose constructor crashes in `gamedata.h` instead.
 - `Modules::IsValidName` only accepts strings inside a module, so strings the game copied into a `CUtlString` need another check.
-- Free game-allocated memory with tier0's allocator (`memoverride.cpp`, `g_pMemAlloc`). The C runtime's `free`, like an SDK `Purge` that bypasses tier0, corrupts the heap.
+- tier0 is not linked, since the SDK's declarations of it go out of date with game updates and calling them crashes; call its exports through `Modules::tier0` and validate what they return. Never free memory the game allocates, as that needs tier0's allocator: hand the game types that don't free, like `SimpleCUtlString` and `SimpleCUtlVector`, instead of SDK containers whose destructors free.
 - Class defaults (`MGetKV3ClassDefaults`) run the game's constructors on a zeroed stack, so uninitialized members read as zero on every run. Keys with random values are listed in `gamedata.h`.
 - Linux differs: `IsInModule` only checks for null, module metadata isn't dumped, and pointers to member functions are 16 bytes, moving struct offsets after them.
 

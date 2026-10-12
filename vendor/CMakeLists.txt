@@ -12,19 +12,10 @@ function(BUILD_HL2SDK GAME SDK_PATH)
 		${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/public/tier1
 	)
 
-	if(WIN32)
-		target_link_libraries(HL2SDK-${GAME} INTERFACE
-			${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/lib/public/win64/interfaces.lib
-			${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/lib/public/win64/tier0.lib
-		)
+	target_sources(HL2SDK-${GAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/interfaces/interfaces.cpp)
 
-		# Routes the CRT allocator to tier0's like the game's modules do, so memory the game allocates
-		# (like CUtlVector elements) can be freed with the SDK's containers
-		target_sources(HL2SDK-${GAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/public/tier0/memoverride.cpp)
-		target_compile_definitions(HL2SDK-${GAME} INTERFACE MEMOVERRIDE_MODULE=DumpSource2)
-	else()
-		target_link_libraries(HL2SDK-${GAME} INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/${SDK_PATH}/lib/linux64/interfaces.a)
-	endif()
+	# tier0 is not linked, so its functions are declared without dllimport for the stubs in common.cpp
+	target_compile_definitions(HL2SDK-${GAME} INTERFACE STATIC_TIER0)
 endfunction()
 
 # DO NOT MODIFY, if you wish to switch the sdk for a game do it in src/main/CMakeLists.txt

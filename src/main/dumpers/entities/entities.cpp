@@ -877,9 +877,9 @@ static bool AddComponentKeys(const CEntityClass* entityClass, ModuleSchemas_t& s
 
 	if (entityClass->m_pfnEnumerateComponents)
 	{
-		// Allocated by the game, and freed with memoverride.cpp
-		CUtlVector<EntComponentNameEntry_t> added;
-		entityClass->m_pfnEnumerateComponents(&added);
+		SimpleCUtlVector<EntComponentNameEntry_t> added;
+		static_assert(sizeof(added) == sizeof(CUtlVector<EntComponentNameEntry_t>));
+		entityClass->m_pfnEnumerateComponents(reinterpret_cast<CUtlVector<EntComponentNameEntry_t>*>(&added));
 
 		if (added.Count() > g_MaxComponents)
 		{
