@@ -18,7 +18,7 @@
  */
 
 #pragma once
-#include "appframework/IAppSystem.h"
+#include "appframework/iappsystem.h"
 #include <spdlog/spdlog.h>
 
 class DumperApplication : public CTier0AppSystem<IAppSystem>

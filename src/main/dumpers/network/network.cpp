@@ -19,10 +19,9 @@
 
 #include "network.h"
 
-// inetchannel.h needs generated protobuf headers, the network serializer types only use this enum from it
+// inetchannel.h needs generated protobuf headers and the network serializer types don't use anything from it
 // TODO: Remove when the SDK's inetworkserializer.h doesn't need inetchannel.h
 #define INETCHANNEL_H
-enum NetChannelBufType_t : int;
 #include <bitvec.h>
 #include <const.h>
 #include <networksystem/inetworkserializer.h>
@@ -109,6 +108,12 @@ static void Add(std::vector<Property_t>& properties, const char* key, const char
 	properties.push_back({ key, label, std::move(value), std::move(text) });
 }
 
+// Strings of the serializer types are null when unset
+static const char* OrEmpty(const char* string)
+{
+	return string ? string : "";
+}
+
 static json GetStrings(const CUtlVector<CUtlString>& strings)
 {
 	auto array = json::array();
@@ -188,8 +193,8 @@ static std::vector<Property_t> GetClassProperties(const CNetworkSerializerClassI
 	for (int i = 0; i < info->m_NetworkVarTypeOverrides.Count(); i++)
 	{
 		const auto* typeOverride = info->m_NetworkVarTypeOverrides[i];
-		typeOverrides[typeOverride->m_FieldName.Get()] = typeOverride->m_OverrideType.Get();
-		typeOverrideTexts.push_back(fmt::format("{} {}", typeOverride->m_FieldName.Get(), typeOverride->m_OverrideType.Get()));
+		typeOverrides[OrEmpty(typeOverride->m_FieldName)] = OrEmpty(typeOverride->m_OverrideType);
+		typeOverrideTexts.push_back(fmt::format("{} {}", OrEmpty(typeOverride->m_FieldName), OrEmpty(typeOverride->m_OverrideType)));
 	}
 	Add(properties, "varTypeOverrides", "var type overrides", std::move(typeOverrides), Join(typeOverrideTexts));
 
@@ -204,8 +209,8 @@ static std::vector<Property_t> GetClassProperties(const CNetworkSerializerClassI
 	for (int i = 0; i < info->m_NetworkReplayCompatFields.Count(); i++)
 	{
 		const auto* field = info->m_NetworkReplayCompatFields[i];
-		replayCompatFields.push_back({ { "field", field->m_FieldPath.Get() }, { "callback", field->m_FieldType.Get() } });
-		replayCompatTexts.push_back(fmt::format("{} {}", field->m_FieldPath.Get(), field->m_FieldType.Get()));
+		replayCompatFields.push_back({ { "field", OrEmpty(field->m_FieldPath) }, { "callback", OrEmpty(field->m_CallbackName) } });
+		replayCompatTexts.push_back(fmt::format("{} {}", OrEmpty(field->m_FieldPath), OrEmpty(field->m_CallbackName)));
 	}
 	Add(properties, "replayCompatFields", "replay compat fields", std::move(replayCompatFields), Join(replayCompatTexts));
 
@@ -227,16 +232,16 @@ static std::vector<Property_t> GetFieldProperties(const CNetworkSerializerFieldI
 	std::erase_if(plainType, [](char c) { return c == '*' || c == ' '; });
 	Add(properties, "class", "class", className != plainType ? className : "");
 
-	Add(properties, "alias", "alias", field->m_NetworkAlias.Get());
-	Add(properties, "typeAlias", "type alias", field->m_NetworkTypeAlias.Get());
-	Add(properties, "serializer", "serializer", field->m_NetworkSerializer.Get());
-	Add(properties, "encoder", "encoder", field->m_NetworkEncoder.Get());
+	Add(properties, "alias", "alias", OrEmpty(field->m_NetworkAlias));
+	Add(properties, "typeAlias", "type alias", OrEmpty(field->m_NetworkTypeAlias));
+	Add(properties, "serializer", "serializer", OrEmpty(field->m_NetworkSerializer));
+	Add(properties, "encoder", "encoder", OrEmpty(field->m_NetworkEncoder));
 
 	const auto& filter = field->m_NetworkSendProxyRecipientsFilter;
-	Add(properties, "recipientsFilter", "recipients filter", filter ? filter->m_FilterName.Get() : "");
+	Add(properties, "recipientsFilter", "recipients filter", filter ? OrEmpty(filter->m_FilterName) : "");
 
 	const auto& changePointerCallback = field->m_NetworkChangePointerCallback;
-	Add(properties, "changePointerCallback", "change pointer callback", changePointerCallback ? changePointerCallback->m_CallbackName.Get() : "");
+	Add(properties, "changePointerCallback", "change pointer callback", changePointerCallback ? OrEmpty(changePointerCallback->m_CallbackName) : "");
 
 	Add(properties, "priority", "priority", field->m_NetworkPriority != 64 ? json(field->m_NetworkPriority) : json());
 	Add(properties, "userGroups", "user groups", GetStrings(field->m_NetworkIncludeByUserGroup));
@@ -334,7 +339,7 @@ static bool ReadClasses(const char* module, const CNetworkSerializerCodeGenDatab
 		// The SDK types can go out of date while the code that fills them stays the same, so check what is read
 		const auto* info = database->m_ClassInfos.Element(i);
 		const auto* name = database->m_ClassInfos.GetElementName(i);
-		if (!info || info->m_pDatabase != database || strcmp(info->m_pszClassName.Get(), name) || info->m_nClassSize <= 0 ||
+		if (!info || info->m_pDatabase != database || strcmp(OrEmpty(info->m_pszClassName), name) || info->m_nClassSize <= 0 ||
 			!IsBool(info->m_NetworkVarEmbeddedNotFlattened))
 		{
 			spdlog::critical("Network class {} in {} does not match, CNetworkSerializerClassInfo in the SDK needs updating", name, module);
@@ -344,7 +349,7 @@ static bool ReadClasses(const char* module, const CNetworkSerializerCodeGenDatab
 		// The networked type, like the element type of network vectors (MNetworkVarNames before it was removed)
 		std::map<std::string, std::string> varTypes;
 		for (int m = 0; m < info->m_FieldTypeMappings.Count(); m++)
-			varTypes[info->m_FieldTypeMappings[m]->m_FieldName.Get()] = info->m_FieldTypeMappings[m]->m_FieldType.Get();
+			varTypes[OrEmpty(info->m_FieldTypeMappings[m]->m_FieldName)] = OrEmpty(info->m_FieldTypeMappings[m]->m_FieldType);
 
 		auto& networkClass = classes[name];
 		networkClass.properties = GetClassProperties(info);
@@ -352,7 +357,7 @@ static bool ReadClasses(const char* module, const CNetworkSerializerCodeGenDatab
 		for (int f = 0; f < info->m_Fields.Count(); f++)
 		{
 			const auto* field = info->m_Fields[f];
-			if (!field || !field->m_pszFieldName.Get()[0] || field->m_nFieldOffset < 0 || field->m_nFieldOffset >= info->m_nClassSize ||
+			if (!field || !OrEmpty(field->m_pszFieldName)[0] || field->m_nFieldOffset < 0 || field->m_nFieldOffset >= info->m_nClassSize ||
 				!IsBool(field->m_NetworkPolymorphic) || !IsBool(field->m_NetworkVarEmbeddedNotFlattened) ||
 				!IsOutOfPVSUpdates(field->m_NetworkOutOfPVSUpdates) ||
 				!IsNameList(field->m_NetworkChangeTags))
@@ -361,7 +366,7 @@ static bool ReadClasses(const char* module, const CNetworkSerializerCodeGenDatab
 				return false;
 			}
 
-			std::string fieldName = field->m_pszFieldName.Get();
+			std::string fieldName = field->m_pszFieldName;
 			auto varType = varTypes.find(fieldName);
 			auto type = varType != varTypes.end() ? varType->second : std::string(field->m_pszTypeName.Get());
 			networkClass.fields.push_back({ fieldName, type, GetFieldProperties(field, type) });

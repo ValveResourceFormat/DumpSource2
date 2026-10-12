@@ -21,7 +21,7 @@
 #include "oslink.h"
 #include "dbg.h"
 #include "interface.h"
-#include "strtools.h"
+#include "tier0_strtools.h"
 #include "plat.h"
 #include <filesystem>
 #include "common.h"

@@ -21,7 +21,7 @@
 #include <vector>
 #include <optional>
 #include <nlohmann/json.hpp>
-#include "schemasystem/schematypes.h"
+#include "schemasystem/schemasystem.h"
 
 class CSchemaSystemTypeScope;
 

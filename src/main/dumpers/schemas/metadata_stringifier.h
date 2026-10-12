@@ -22,7 +22,7 @@
 #pragma once
 #include <map>
 #include <string>
-#include <schemasystem/schematypes.h>
+#include <schemasystem/schemasystem.h>
 #include "schemas.h"
 
 namespace Dumpers::Schemas

@@ -5,7 +5,7 @@
 #include "tier0/logging.h"
 #include "tier0/memalloc.h"
 #include "utlstring.h"
-#include "bufferstring.h"
+#include "buffer_string.h"
 #include <spdlog/spdlog.h>
 
 const char* SimpleCUtlString::Get() {
@@ -67,82 +67,82 @@ void CUtlString::SetDirect(const char*, int) {
 	// STUB
 }
 
-bool V_StringToBool(const char*, bool, bool*, char**, uint, IParsingErrorListener*)
+bool V_StringToBool(const char*, bool, bool*, char**, uint, IErrorListener*)
 {
 	// STUB
 	return false;
 }
 
-void V_StringToColor(const char*, Color&, bool*, char**, uint, IParsingErrorListener*)
+void V_StringToColor(const char*, Color&, bool*, char**, uint, IErrorListener*)
 {
 	// STUB
 }
 
-float32 V_StringToFloat32(const char*, float32, bool*, char**, uint, IParsingErrorListener*)
-{
-	// STUB
-	return 0;
-}
-
-float64 V_StringToFloat64(const char*, float64, bool*, char**, uint, IParsingErrorListener*)
+float32 V_StringToFloat32(const char*, float32, bool*, char**, uint, IErrorListener*)
 {
 	// STUB
 	return 0;
 }
 
-int16 V_StringToInt16(const char*, int16, bool*, char**, uint, IParsingErrorListener*)
+float64 V_StringToFloat64(const char*, float64, bool*, char**, uint, IErrorListener*)
 {
 	// STUB
 	return 0;
 }
 
-int32 V_StringToInt32(const char*, int32, bool*, char**, uint, IParsingErrorListener*)
+int16 V_StringToInt16(const char*, int16, bool*, char**, uint, IErrorListener*)
 {
 	// STUB
 	return 0;
 }
 
-int64 V_StringToInt64(const char*, int64, bool*, char**, uint, IParsingErrorListener*)
+int32 V_StringToInt32(const char*, int32, bool*, char**, uint, IErrorListener*)
 {
 	// STUB
 	return 0;
 }
 
-void V_StringToQAngle(const char*, QAngle&, bool*, char**, uint, IParsingErrorListener*) {
-	// STUB
-}
-
-uint16 V_StringToUint16(const char*, uint16, bool*, char**, uint, IParsingErrorListener*) {
+int64 V_StringToInt64(const char*, int64, bool*, char**, uint, IErrorListener*)
+{
 	// STUB
 	return 0;
 }
 
-uint32 V_StringToUint32(const char*, uint32, bool*, char**, uint, IParsingErrorListener*) {
+void V_StringToQAngle(const char*, QAngle&, bool*, char**, uint, IErrorListener*) {
+	// STUB
+}
+
+uint16 V_StringToUint16(const char*, uint16, bool*, char**, uint, IErrorListener*) {
 	// STUB
 	return 0;
 }
 
-uint64 V_StringToUint64(const char*, uint64, bool*, char**, uint, IParsingErrorListener*) {
+uint32 V_StringToUint32(const char*, uint32, bool*, char**, uint, IErrorListener*) {
 	// STUB
 	return 0;
 }
 
-void V_StringToVector(const char*, Vector&, bool*, char**, uint, IParsingErrorListener*)
+uint64 V_StringToUint64(const char*, uint64, bool*, char**, uint, IErrorListener*) {
+	// STUB
+	return 0;
+}
+
+void V_StringToVector(const char*, Vector&, bool*, char**, uint, IErrorListener*)
 {
 	// STUB
 }
 
-void V_StringToVector2D(const char*, Vector2D&, bool*, char**, uint, IParsingErrorListener*)
+void V_StringToVector2D(const char*, Vector2D&, bool*, char**, uint, IErrorListener*)
 {
 	// STUB
 }
 
-void V_StringToVector4D(const char*, Vector4D&, bool*, char**, uint, IParsingErrorListener*)
+void V_StringToVector4D(const char*, Vector4D&, bool*, char**, uint, IErrorListener*)
 {
 	// STUB
 }
 
-void V_StringToVectorWS(const char*, VectorWS&, bool*, char**, uint, IParsingErrorListener*)
+void V_StringToVectorWS(const char*, VectorWS&, bool*, char**, uint, IErrorListener*)
 {
 	// STUB
 }

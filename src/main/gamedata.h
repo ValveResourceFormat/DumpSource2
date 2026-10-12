@@ -23,7 +23,7 @@
 
 #include <icvar.h>
 #include <interfaces/interfaces.h>
-#include <tier1/utlstring.h>
+#include <tier0/utlstring.h>
 #include <set>
 #include <string>
 #include <unordered_map>

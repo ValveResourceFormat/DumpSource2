@@ -25,6 +25,9 @@
 #include "output.h"
 #include "dumpers/module_metadata/module_metadata.h"
 #include "dumpers/schemas/schemas.h"
+// inetchannel.h needs generated protobuf headers and the entity class types don't use anything from it
+// TODO: Remove when the SDK's inetworkserializer.h doesn't need inetchannel.h
+#define INETCHANNEL_H
 #include <entity2/entityclass.h>
 #include <datamap.h>
 #include <schemasystem/schemasystem.h>

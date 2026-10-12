@@ -23,7 +23,7 @@
 #include <icvar.h>
 #undef private
 #undef _ALLOW_KEYWORD_MACROS
-#include <schemasystem/schematypes.h>
+#include <schemasystem/schemasystem.h>
 
 #include "concommands.h"
 #include "globalvariables.h"
