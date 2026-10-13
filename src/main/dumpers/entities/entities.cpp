@@ -1074,13 +1074,23 @@ static nlohmann::json GetEntitiesJson(std::map<std::string, std::map<std::string
 	return array;
 }
 
-// Returns false if the entity class list could not be found or read in a module that has one
+// Returns false if a module that has an entity class list did not load, or its list could not be found or read
 bool Dump()
 {
 	// module -> design name -> class
 	std::map<std::string, std::map<std::string, EntityClass_t>> entities;
 	std::map<std::string, std::vector<std::string>> unusedDataMaps;
 	bool failed = false;
+
+	// Their entities would silently be missing
+	for (const auto& name : g_RequiredEntityModules)
+	{
+		if (std::none_of(Modules::allModules.begin(), Modules::allModules.end(), [&](const CModule& module) { return name == module.m_pszModule; }))
+		{
+			spdlog::critical("Required module {} did not load", name);
+			failed = true;
+		}
+	}
 
 	for (auto& module : Modules::allModules)
 	{
