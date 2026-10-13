@@ -267,7 +267,7 @@ static std::vector<std::string> GetRareFieldFlags(int flags)
 
 // Enums and classes shared by client and server are only in one of their scopes, and others are in library scopes,
 // so all scopes are used. The module's own scope comes first, then the others by name.
-// Returns false if an enum is invalid.
+// Returns false if the type scopes or an enum are invalid.
 static bool GetModuleSchemas(const CModule& module, ModuleSchemas_t& schemas)
 {
 	if (!Interfaces::schemaSystem)
@@ -278,6 +278,8 @@ static bool GetModuleSchemas(const CModule& module, ModuleSchemas_t& schemas)
 
 	const auto moduleScopeName = fmt::format("{}{}{}", MODULE_PREFIX, module.m_pszModule, MODULE_EXT);
 	auto scopes = Schemas::GetTypeScopes();
+	if (scopes.empty())
+		return false;
 
 	std::sort(scopes.begin(), scopes.end(), [&](auto a, auto b) {
 		return std::make_tuple(moduleScopeName != a->m_szScopeName, std::string_view(a->m_szScopeName)) < std::make_tuple(moduleScopeName != b->m_szScopeName, std::string_view(b->m_szScopeName));

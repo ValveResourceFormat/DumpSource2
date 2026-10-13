@@ -81,7 +81,7 @@ struct IntermediateSchemaEnum
 
 bool Dump();
 
-// Every module type scope, and the global type scope last
+// Every module type scope, and the global type scope last. None if the SDK structs are outdated, which is logged.
 std::vector<CSchemaSystemTypeScope*> GetTypeScopes();
 
 // Returns what is invalid in the enum, or null

@@ -21,7 +21,9 @@
 #include "interfaces.h"
 #include "modules.h"
 #include <algorithm>
+#include <filesystem>
 #include <optional>
+#include <set>
 #include <tuple>
 #include <unordered_map>
 #include "metadata_stringifier.h"
@@ -346,16 +348,73 @@ static void RemoveInheritedDefaults(std::vector<IntermediateSchemaClass>& classe
 	}
 }
 
-std::vector<CSchemaSystemTypeScope*> GetTypeScopes()
+// Walking a map read through an outdated struct crashes, so check that its tree is consistent first
+template <typename T>
+static bool IsValidSchemaMap(T& map)
+{
+	auto tree = map.m_Map.AccessTree();
+	if (tree->Count() == 0)
+		return tree->Root() == tree->InvalidIndex();
+
+	return tree->Count() <= tree->MaxElement() && tree->Root() < tree->MaxElement();
+}
+
+static std::vector<CSchemaSystemTypeScope*> ReadTypeScopes()
 {
 	auto schemaSystem = Interfaces::schemaSystem;
 	const auto& typeScopes = schemaSystem->m_TypeScopes;
 
+	// Type scopes are named after the module they belong to, so there can't be more than the loaded modules
+	std::set<std::string> moduleScopeNames;
+	for (const auto& module : Modules::allModules)
+		moduleScopeNames.insert(fmt::format("{}{}{}", MODULE_PREFIX, std::filesystem::path(module.m_pszModule).filename().string(), MODULE_EXT));
+	for (const auto& module : { Modules::tier0.get(), Modules::schemaSystem.get() })
+		moduleScopeNames.insert(fmt::format("{}{}{}", MODULE_PREFIX, module->m_pszModule, MODULE_EXT));
+
+	const auto numScopes = typeScopes.GetNumStrings();
+	if (*(const uint8*)&schemaSystem->m_bDefaultTypeScopeIsLocal > 1 || *(const uint8*)&schemaSystem->m_bSchemaSystemIsReady > 1 || numScopes <= 0 || static_cast<size_t>(numScopes) > moduleScopeNames.size())
+	{
+		spdlog::critical("Schema system has {} type scopes, CSchemaSystem in the SDK needs updating", numScopes);
+		return {};
+	}
+
 	std::vector<CSchemaSystemTypeScope*> scopes;
-	for (auto i = 0; i < typeScopes.GetNumStrings(); ++i)
-		scopes.push_back(typeScopes[i]);
+	for (auto i = 0; i < numScopes; ++i)
+	{
+		auto scope = typeScopes[i];
+		if (!scope || !memchr(scope->m_szScopeName, '\0', sizeof(scope->m_szScopeName)))
+		{
+			spdlog::critical("Schema type scope {} is invalid, CSchemaSystem in the SDK needs updating", i);
+			return {};
+		}
+
+		if (!moduleScopeNames.contains(scope->m_szScopeName))
+		{
+			spdlog::critical("Schema type scope {} is not a loaded module, CSchemaSystem in the SDK needs updating", scope->m_szScopeName);
+			return {};
+		}
+
+		scopes.push_back(scope);
+	}
 
 	scopes.push_back(schemaSystem->GlobalTypeScope());
+
+	for (auto scope : scopes)
+	{
+		if (!IsValidSchemaMap(scope->m_DeclaredClasses) || !IsValidSchemaMap(scope->m_DeclaredEnums))
+		{
+			spdlog::critical("Schema type scope {} has invalid declared classes or enums, CSchemaSystemTypeScope in the SDK needs updating", scope->m_szScopeName);
+			return {};
+		}
+	}
+
+	return scopes;
+}
+
+std::vector<CSchemaSystemTypeScope*> GetTypeScopes()
+{
+	// Schema bindings are installed before any dumper runs, so the scopes are read and checked once
+	static const auto scopes = ReadTypeScopes();
 	return scopes;
 }
 
@@ -365,7 +424,11 @@ bool Dump()
 	std::vector<IntermediateSchemaEnum> enums;
 	std::vector<IntermediateSchemaClass> classes;
 
-	for (auto typeScope : GetTypeScopes())
+	auto typeScopes = GetTypeScopes();
+	if (typeScopes.empty())
+		return false;
+
+	for (auto typeScope : typeScopes)
 	{
 		if (!DumpTypeScope(typeScope, enums, classes))
 			return false;
