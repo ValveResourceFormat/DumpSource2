@@ -265,4 +265,25 @@ inline const byte g_NetworkDatabaseSignature[] = "\xE8\x2A\x2A\x2A\x2A\xE8\x2A\x
 inline constexpr size_t g_NetworkDatabaseNameOffset = 10;
 #endif
 
+// Each DECLARE_NETWORKCLASS in the server adds a registration to a list when the queued registrations run. The server networks
+// the registered classes that are constructible and derive from CBaseEntity, and their class ids are their order sorted by name,
+// ignoring case. Signature of the list head load in CEntity2NetworkClasses::InitEntity2NetworkClasses, the load is at the offset.
+// To update, find the xref to the "one or more DECLARE_NETWORKCLASS is malformed" string in server.
+#ifdef _WIN32
+inline const byte g_NetworkClassListSignature[] = "\xE8\x2A\x2A\x2A\x2A\x4C\x8B\x3D\x2A\x2A\x2A\x2A\x32\xC0\x33\xFF";
+inline constexpr size_t g_NetworkClassListOffset = 5;
+#else
+inline const byte g_NetworkClassListSignature[] = "\x4C\x8B\x15\x2A\x2A\x2A\x2A\x4D\x85\xD2\x0F\x84\x2A\x2A\x2A\x2A\x48\x8D\x45\x80";
+inline constexpr size_t g_NetworkClassListOffset = 0;
+#endif
+
+// A registration in that list, named here since the engine gives it no name.
+// TODO: Use the SDK's struct when it has one
+struct NetworkClassRegistration_t
+{
+	const char* m_pszClassName;
+	const char* m_pszNetworkName;
+	NetworkClassRegistration_t* m_pNext;
+};
+
 } // namespace GameData

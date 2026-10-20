@@ -38,6 +38,7 @@
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <set>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -376,6 +377,64 @@ static bool ReadClasses(const char* module, const CNetworkSerializerCodeGenDatab
 	return true;
 }
 
+// Marks the classes with a DECLARE_NETWORKCLASS registration, which the module's registrations added to the list.
+// Returns false if the list can't be read or doesn't match what is written.
+static bool AddNetworkClasses(CModule& module, Classes_t& classes)
+{
+	int error;
+	auto match = (uint8_t*)module.FindSignature(g_NetworkClassListSignature, sizeof(g_NetworkClassListSignature) - 1, error);
+	if (error == SIG_FOUND_MULTIPLE)
+	{
+		spdlog::critical("Found multiple network class list signature matches in {}, make g_NetworkClassListSignature in gamedata.h more specific", module.m_pszModule);
+		return false;
+	}
+
+	if (!match || !Modules::IsRipRelativeLoad(match + g_NetworkClassListOffset))
+	{
+		spdlog::critical("Could not find the network class list in {}, update g_NetworkClassListSignature in gamedata.h", module.m_pszModule);
+		return false;
+	}
+
+	auto head = Modules::GetGlobalFromSignatureMatch<NetworkClassRegistration_t*>(match + g_NetworkClassListOffset);
+	if (!Modules::IsInModule(module, head) || !*head)
+	{
+		spdlog::critical("The network class list in {} is empty, update g_NetworkClassListSignature in gamedata.h", module.m_pszModule);
+		return false;
+	}
+
+	// Duplicates also stop the walk if the list loops
+	std::set<std::string> names;
+	for (auto registration = *head; registration; registration = registration->m_pNext)
+	{
+		if (!Modules::IsInModule(module, registration) || !Modules::IsValidName(registration->m_pszClassName) ||
+			!Modules::IsValidName(registration->m_pszNetworkName) || !names.insert(registration->m_pszClassName).second)
+		{
+			spdlog::critical("Network class {} in {} does not match, NetworkClassRegistration_t in gamedata.h needs updating", names.size(), module.m_pszModule);
+			return false;
+		}
+
+		// The client links its classes to the server's by network name, which so far is always the class name
+		if (strcmp(registration->m_pszClassName, registration->m_pszNetworkName))
+		{
+			spdlog::critical("Network class {} in {} is networked as {}, which is not written", registration->m_pszClassName, module.m_pszModule,
+				registration->m_pszNetworkName);
+			return false;
+		}
+
+		auto networkClass = classes.find(registration->m_pszClassName);
+		if (networkClass == classes.end())
+		{
+			spdlog::critical("Network class {} in {} is not in its network database", registration->m_pszClassName, module.m_pszModule);
+			return false;
+		}
+
+		Add(networkClass->second.properties, "networkClass", "network class", true);
+	}
+
+	spdlog::debug("Found {} network classes in {}", names.size(), module.m_pszModule);
+	return true;
+}
+
 static std::string Describe(const Property_t& property)
 {
 	return property.text.empty() ? property.label : fmt::format("{}: {}", property.label, property.text);
@@ -550,7 +609,12 @@ bool Dump()
 		}
 
 		auto database = RunRegistrations(*module);
-		if (!database || !ReadClasses(name.c_str(), database, modules[name]))
+		auto& classes = modules[name];
+		if (!database || !ReadClasses(name.c_str(), database, classes))
+			return false;
+
+		// Only the server declares network classes, the client links its own to them
+		if (name == "server" && !AddNetworkClasses(*module, classes))
 			return false;
 	}
 
