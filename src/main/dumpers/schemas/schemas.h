@@ -56,7 +56,7 @@ struct IntermediateSchemaClass
 	std::string name;
 	std::string module;
 	int32_t size;
-	uint8_t alignment; // 255 when unknown, like for abstract classes
+	uint8_t alignment; // 255 when unknown, which constructible classes never have
 	std::vector<std::string> flags;
 	std::vector<IntermediateMetadata> metadata;
 	std::vector<IntermediateSchemaClassParent> parents;
@@ -75,6 +75,7 @@ struct IntermediateSchemaEnum
 	std::string name;
 	std::string module;
 	std::optional<std::string> stringAlignment;
+	std::vector<std::string> flags;
 	std::vector<IntermediateMetadata> metadata;
 	std::vector<IntermediateSchemaEnumMember> members;
 };

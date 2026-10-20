@@ -226,6 +226,9 @@ static void DumpEnums(const std::vector<IntermediateSchemaEnum>& enums, json& en
 		enumObj["module"] = intermediateEnum.module;
 		enumObj["alignment"] = intermediateEnum.stringAlignment;
 
+		if (!intermediateEnum.flags.empty())
+			enumObj["flags"] = intermediateEnum.flags;
+
 		auto enumMetadataArr = SerializeMetadataArray(intermediateEnum.metadata);
 		if (enumMetadataArr.size())
 			enumObj["metadata"] = std::move(enumMetadataArr);

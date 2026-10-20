@@ -114,11 +114,13 @@ const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
 	return nullptr;
 }
 
-// Metadata that schemasystem stores as class flags instead of in the class metadata. MConstructibleClassBase is named in
-// schemasystem's registration errors. Bit 16 is also used, which schemasystem treats like an abstract class when checking
-// that classes are constructible like their bases, but it has no name for it.
+// Metadata that schemasystem stores as class flags instead of in the class metadata. MConstructibleClassBase and
+// MGlobalTypeScope are named in schemasystem's registration errors. Classes in the global type scope only have the latter
+// when they ask for it, the others get there by default. Bit 16 is also used, which schemasystem treats like an abstract class
+// when checking that classes are constructible like their bases, but it has no name for it.
 // TODO: Write bit 16 when its name is known, the SDK's MNonConstructibleClassBase is a guess
 static constexpr std::pair<uint32, const char*> g_ClassInfoTagFlags[] = {
+	{ SCHEMA_CF1_GLOBAL_TYPE_SCOPE, "MGlobalTypeScope" },
 	{ SCHEMA_CF1_INFO_TAG_MNetworkAssumeNotNetworkable, "MNetworkAssumeNotNetworkable" },
 	{ SCHEMA_CF1_INFO_TAG_MNetworkNoBase, "MNetworkNoBase" },
 	{ SCHEMA_CF1_INFO_TAG_MIgnoreTypeScopeMetaChecks, "MIgnoreTypeScopeMetaChecks" },
@@ -135,7 +137,24 @@ static constexpr std::pair<uint32, const char*> g_ClassFlags[] = {
 	{ SCHEMA_CF1_IS_ABSTRACT, "abstract" },
 	{ SCHEMA_CF1_HAS_TRIVIAL_CONSTRUCTOR, "trivial_constructor" },
 	{ SCHEMA_CF1_HAS_TRIVIAL_DESTRUCTOR, "trivial_destructor" },
+	{ SCHEMA_CF1_CONSTRUCT_ALLOWED, "construct_allowed" },
 	{ SCHEMA_CF1_CONSTRUCT_DISALLOWED, "construct_disallowed" },
+};
+
+// Schemasystem treats a class as constructible when only the allowed bit of these is set
+static constexpr uint32 g_ClassConstructMask = SCHEMA_CF1_IS_ABSTRACT | SCHEMA_CF1_CONSTRUCT_ALLOWED | SCHEMA_CF1_CONSTRUCT_DISALLOWED;
+
+// Same as the class tag, enums in the global type scope only have it when they ask for it
+static constexpr std::pair<uint16, const char*> g_EnumInfoTagFlags[] = {
+	{ SCHEMA_EF_GLOBAL_TYPE_SCOPE, "MGlobalTypeScope" },
+};
+
+// Enum flags for schemas.json. Bits 4 and 5 have no known meaning: bit 4 is on most enums of bit flags, bit 5 on about a third
+// of the enums.
+// TODO: Use the SDK's name when it has one for bit 3, and write bits 4 and 5 when their names are known
+static constexpr std::pair<uint16, const char*> g_EnumFlags[] = {
+	// Unsigned storage type: on every enum with values above the signed limit, and on others declared with an unsigned type
+	{ SCHEMA_EF_UNK003, "unsigned" },
 };
 
 static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchemaClass>& classes)
@@ -161,9 +180,21 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 			.alignment = classInfo->m_nAlignment,
 		};
 
+		// Constructible classes have an alignment, so the flag is only written for the others
+		const bool hasAlignment = classInfo->m_nAlignment != 255;
+		if (hasAlignment && (classInfo->m_nFlags1 & g_ClassConstructMask) != SCHEMA_CF1_CONSTRUCT_ALLOWED)
+		{
+			spdlog::critical("Schema class '{}' has an alignment but is not constructible, the construct_allowed handling in schemas.cpp needs updating", classInfo->m_pszName);
+			return false;
+		}
+
+		uint32 flags = classInfo->m_nFlags1;
+		if (hasAlignment)
+			flags &= ~SCHEMA_CF1_CONSTRUCT_ALLOWED;
+
 		for (const auto& [flag, name] : g_ClassFlags)
 		{
-			if (classInfo->m_nFlags1 & flag)
+			if (flags & flag)
 				schemaClass.flags.push_back(name);
 		}
 
@@ -264,10 +295,22 @@ static bool DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<Intermediat
 			.stringAlignment = std::move(alignment),
 		};
 
+		for (const auto& [flag, name] : g_EnumFlags)
+		{
+			if (enumInfo->m_nFlags & flag)
+				schemaEnum.flags.push_back(name);
+		}
+
 		for (uint16_t k = 0; k < enumInfo->m_nStaticMetadataCount; k++)
 		{
 			const auto& metadataEntry = enumInfo->m_pStaticMetadata[k];
 			schemaEnum.metadata.push_back(GetMetadata(metadataEntry, enumInfo->m_pszName));
+		}
+
+		for (const auto& [flag, name] : g_EnumInfoTagFlags)
+		{
+			if (enumInfo->m_nFlags & flag)
+				schemaEnum.metadata.push_back({ .name = name, .hasValue = false });
 		}
 
 		for (uint16_t k = 0; k < enumInfo->m_nEnumeratorCount; k++)
