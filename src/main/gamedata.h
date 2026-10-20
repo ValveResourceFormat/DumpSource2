@@ -19,7 +19,7 @@
 #pragma once
 
 // Signatures and game struct layouts that are not in the SDK, these are what change with game updates.
-// Signatures use \x2A as a wildcard byte, and start at the load of the global they find (see GetGlobalFromSignatureMatch).
+// Signatures use \x2A as a wildcard byte, and start at the load or store of the global they find (see GetGlobalFromSignatureMatch).
 
 #include <icvar.h>
 #include <interfaces/interfaces.h>
@@ -209,14 +209,15 @@ inline constexpr size_t g_CreateInterfaceListOffset = 0x10;
 // Convars and commands are queued by each module's statically linked tier1 until ConVar_Register is called,
 // so they can be read right after loading the module. The lists are ConVarRegList and ConCommandRegList from the SDK.
 
-// Signatures of the list append code, starting at the list head load.
+// Signatures of the list append code, starting at the list head load on Windows. On Linux they start at the list head store,
+// followed by the store of the old head into the new list, as the code around them is reordered between builds.
 // To update, find the list allocation (sizeof(ConVarRegList)) in tier0. The code is only linked into modules that declare any.
 #ifdef _WIN32
 inline const byte g_ConVarQueueSignature[] = "\x4C\x8B\x0D\x2A\x2A\x2A\x2A\x4D\x85\xC9\x74\x2A\x45\x8B\x01\x41\x83\xF8\x64";
 inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x0D\x2A\x2A\x2A\x2A\x48\x85\xC9\x74\x2A\x44\x8B\x01\x41\x83\xF8\x64";
 #else
-inline const byte g_ConVarQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\xC7\x00\x00\x00\x00\x00\xB9\x01\x00\x00\x00\x48\x89\x05\x2A\x2A\x2A\x2A\x48\x89\x90\x88\x3E";
-inline const byte g_ConCommandQueueSignature[] = "\x48\x8B\x15\x2A\x2A\x2A\x2A\xC7\x00\x00\x00\x00\x00\xB9\x01\x00\x00\x00\x48\x89\x05\x2A\x2A\x2A\x2A\x48\x89\x90\x08\x19";
+inline const byte g_ConVarQueueSignature[] = "\x48\x89\x05\x2A\x2A\x2A\x2A\x48\x89\x2A\x88\x3E\x00\x00";
+inline const byte g_ConCommandQueueSignature[] = "\x48\x89\x05\x2A\x2A\x2A\x2A\x48\x89\x2A\x08\x19\x00\x00";
 #endif
 
 // Modules that always declare both, not finding their queues means the signatures are outdated
