@@ -90,8 +90,8 @@ static const std::pair<int, const char*> g_ClassFlagNames[] = {
 	{ ECF_BECOME_SUSPENDED_INSTEAD_OF_DORMANT, "ECF_BECOME_SUSPENDED_INSTEAD_OF_DORMANT" },
 	{ ECF_ANONYMOUS_ENTITY, "ECF_ANONYMOUS_ENTITY" },
 	{ ECF_PRECACHE_NETWORKED_ENTITY_ON_CLIENT, "ECF_PRECACHE_NETWORKED_ENTITY_ON_CLIENT" },
-	{ ECF_UNK001, "ECF_UNK001" },
-	{ ECF_UNK002, "ECF_UNK002" },
+	{ ECF_HAS_ALTERNATE_BASELINES, "ECF_HAS_ALTERNATE_BASELINES" },
+	{ ECF_ALTERNATE_BASELINES_USE_RECIPIENTS_FILTERS, "ECF_ALTERNATE_BASELINES_USE_RECIPIENTS_FILTERS" },
 	{ ECF_FORCE_WORLDGROUPID, "ECF_FORCE_WORLDGROUPID" },
 };
 
@@ -303,7 +303,7 @@ static bool GetModuleSchemas(const CModule& module, ModuleSchemas_t& schemas)
 				return false;
 			}
 
-			schemas.m_Enums.try_emplace(enumInfo->m_pszName, enumInfo);
+			schemas.m_Enums.try_emplace(enumInfo->m_pName, enumInfo);
 		}
 
 		// Validated by the schemas dumper
@@ -313,10 +313,10 @@ static bool GetModuleSchemas(const CModule& module, ModuleSchemas_t& schemas)
 			if (!classInfo)
 				continue;
 
-			schemas.m_Classes.try_emplace(classInfo->m_pszName, classInfo);
+			schemas.m_Classes.try_emplace(classInfo->m_pName, classInfo);
 
-			if (classInfo->m_pDataDescMap && dataMaps.insert(classInfo->m_pDataDescMap).second)
-				schemas.m_DataMaps.emplace_back(classInfo->m_pDataDescMap, classInfo->m_pszProjectName);
+			if (classInfo->m_pDataDesc && dataMaps.insert(classInfo->m_pDataDesc).second)
+				schemas.m_DataMaps.emplace_back(classInfo->m_pDataDesc, classInfo->m_pProjectName);
 		}
 	}
 
@@ -438,7 +438,7 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 			keyJson["enum"] = field.enumName;
 
 			if (enumInfo)
-				keyJson["enumModule"] = enumInfo->m_pszProjectName;
+				keyJson["enumModule"] = enumInfo->m_pProjectName;
 		}
 
 		target.m_Entity.m_Strings.push_back(key);
@@ -456,7 +456,7 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 
 		// Embedded structs can be from another module, like hudtextparms_t in server's CGameText is only in client
 		if (auto it = schemas.m_Classes.find(map->dataClassName); it != schemas.m_Classes.end())
-			keyJson["declaredInModule"] = it->second->m_pszProjectName;
+			keyJson["declaredInModule"] = it->second->m_pProjectName;
 
 		if (target.m_pszComponent)
 			keyJson["component"] = target.m_pszComponent;
@@ -511,8 +511,8 @@ static bool AddKeyFields(const datamap_t* map, KeyTarget_t& target, const std::s
 			lines.push_back(fmt::format("{}{}(intchoices) : \"{}\" : : \"\" = // {}", indent, keyName, keyName, comment));
 			lines.push_back(indent + "[");
 
-			for (uint16_t e = 0; e < enumInfo->m_nEnumeratorCount; e++)
-				lines.push_back(fmt::format("{}\t{} : \"{}\"", indent, enumInfo->m_pEnumerators[e].m_nValue, enumInfo->m_pEnumerators[e].m_pszName));
+			for (uint16_t e = 0; e < enumInfo->m_nNumEnumerators; e++)
+				lines.push_back(fmt::format("{}\t{} : \"{}\"", indent, enumInfo->m_pEnumerators[e].m_nValue, enumInfo->m_pEnumerators[e].m_pName));
 
 			lines.push_back(indent + "]");
 		}
@@ -616,7 +616,7 @@ static nlohmann::json GetPulseParams(const nlohmann::ordered_json& meta, const c
 			if (auto prefix = type.find(enumPrefix); prefix != std::string::npos)
 			{
 				if (auto it = schemas.m_Enums.find(type.substr(prefix + enumPrefix.size())); it != schemas.m_Enums.end())
-					paramJson["enumModule"] = it->second->m_pszProjectName;
+					paramJson["enumModule"] = it->second->m_pProjectName;
 			}
 
 			params.push_back(std::move(paramJson));
@@ -800,7 +800,7 @@ static const char* ValidateEntityClass(const CModule& module, const CEntityClass
 	}
 
 	// The schema class, which can be in another module like CEntityInstance in entity2
-	if (auto binding = classInfo->m_pSchemaBinding; binding && (!Modules::FindModuleContaining(binding) || !Modules::IsValidName(binding->m_pszProjectName)))
+	if (auto binding = classInfo->m_pSchemaBinding; binding && (!Modules::FindModuleContaining(binding) || !Modules::IsValidName(binding->m_pProjectName)))
 		return "schema binding";
 
 	if (entityClass->m_pfnEnumerateComponents && !Modules::IsInModule(module, (const void*)entityClass->m_pfnEnumerateComponents))
@@ -852,10 +852,10 @@ static const datamap_t* GetComponentDataMap(const ModuleSchemas_t& schemas, cons
 	auto classInfo = it->second;
 	for (int depth = 0; classInfo && depth < g_MaxDataMapDepth; depth++)
 	{
-		if (classInfo->m_pDataDescMap)
-			return classInfo->m_pDataDescMap;
+		if (classInfo->m_pDataDesc)
+			return classInfo->m_pDataDesc;
 
-		classInfo = classInfo->m_nBaseClassCount > 0 ? classInfo->m_pBaseClasses[0].m_pClass : nullptr;
+		classInfo = classInfo->m_nNumBaseClasses > 0 ? classInfo->m_pBaseClasses[0].m_pClass : nullptr;
 	}
 
 	return nullptr;
@@ -1029,7 +1029,7 @@ static nlohmann::json GetEntitiesJson(std::map<std::string, std::map<std::string
 
 			// Values that are the same as the entity's own are left out: classModule when it's the module,
 			// and the declaring class and module of keys when they're the entity's class
-			const std::string classModule = classInfo->m_pSchemaBinding ? classInfo->m_pSchemaBinding->m_pszProjectName : module;
+			const std::string classModule = classInfo->m_pSchemaBinding ? classInfo->m_pSchemaBinding->m_pProjectName : module;
 
 			for (auto& key : entity.m_Keys)
 			{

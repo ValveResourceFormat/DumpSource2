@@ -81,9 +81,10 @@ static const std::vector<std::pair<uint64_t, const char*>> g_flagMap{
 	{ FCVAR_EXECUTE_PER_TICK, "execute_per_tick" },
 	{ FCVAR_SNAPSHOT_IGNORED, "snapshot_ignored" },
 	{ FCVAR_DEFENSIVE, "defensive" },
-	{ 1ull << 33, "execute_immediately" },      // TODO: Not in any SDK, name is ours. Runs right away inside a __beginseq batch instead of being queued (exec, execifexists)
+	{ FCVAR_EXECUTE_IMMEDIATELY, "execute_immediately" },
 	{ FCVAR_GAMEINFO_CANNOT_OVERRIDE, "gameinfo_cannot_override" },
-	{ 1ull << 37, "enum_value" },               // TODO: Not in any SDK, name is ours. Value is a schema enum or enum flags, written as enumerator names
+	{ FCVAR_VCONSOLE_NO_CHANGE_NOTIFY, "vconsole_no_change_notify" },
+	{ FCVAR_ENUM_VALUE, "enum_value" },
 };
 
 static std::vector<std::string> GetFlagNames(uint64_t flags)
@@ -322,7 +323,7 @@ static const char* ValidateQueued(const ConVarRegList::Entry_t& queued)
 			return "enum info function";
 
 		auto enumInfo = GetEnum(info);
-		if (!Modules::FindModuleContaining(enumInfo) || !Modules::IsValidName(enumInfo->m_pszName))
+		if (!Modules::FindModuleContaining(enumInfo) || !Modules::IsValidName(enumInfo->m_pName))
 			return "enum info";
 	}
 
@@ -553,12 +554,12 @@ static bool WriteQueued(Queue_t& queue, bool isConVar, std::set<std::string>& wh
 				maxValue = entry.m_Max;
 			}
 
-			WriteValueLine(entry.m_eType == EConVarType_String ? QuoteString(value.m_Text) : value.m_Text, minValue, maxValue, entry.m_pEnum ? entry.m_pEnum->m_pszName : nullptr, flags, output);
+			WriteValueLine(entry.m_eType == EConVarType_String ? QuoteString(value.m_Text) : value.m_Text, minValue, maxValue, entry.m_pEnum ? entry.m_pEnum->m_pName : nullptr, flags, output);
 
 			item["type"] = value.m_pszType;
 			if (entry.m_pEnum)
 			{
-				item["enum"] = entry.m_pEnum->m_pszName;
+				item["enum"] = entry.m_pEnum->m_pName;
 				g_EnumConVars[name] = entry.m_pEnum;
 			}
 			if (hasDefault)
@@ -647,10 +648,10 @@ bool AddEnumModules()
 		if (it == g_EnumConVars.end())
 			continue;
 
-		auto project = it->second->m_pszProjectName;
+		auto project = it->second->m_pProjectName;
 		if (!Modules::IsValidName(project))
 		{
-			spdlog::critical("Enum {} of convar {} has no module after installing schema bindings, SchemaEnumInfoData_t in the SDK needs updating", it->second->m_pszName, it->first);
+			spdlog::critical("Enum {} of convar {} has no module after installing schema bindings, SchemaEnumInfoData_t in the SDK needs updating", it->second->m_pName, it->first);
 			return false;
 		}
 

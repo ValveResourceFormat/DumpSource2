@@ -125,10 +125,10 @@ static json SerializeType(CSchemaType* type)
 		{
 			j["category"] = "declared_class";
 			auto* classType = static_cast<CSchemaType_DeclaredClass*>(type);
-			if (classType->m_pClassInfo && classType->m_pClassInfo->m_pszName)
+			if (classType->m_pClassInfo && classType->m_pClassInfo->m_pName)
 			{
-				j["name"] = classType->m_pClassInfo->m_pszName;
-				j["module"] = classType->m_pClassInfo->m_pszProjectName;
+				j["name"] = classType->m_pClassInfo->m_pName;
+				j["module"] = classType->m_pClassInfo->m_pProjectName;
 			}
 			else
 				j["name"] = type->m_sTypeName.String();
@@ -138,10 +138,10 @@ static json SerializeType(CSchemaType* type)
 		{
 			j["category"] = "declared_enum";
 			auto* enumType = static_cast<CSchemaType_DeclaredEnum*>(type);
-			if (enumType->m_pEnumInfo && enumType->m_pEnumInfo->m_pszName)
+			if (enumType->m_pEnumInfo && enumType->m_pEnumInfo->m_pName)
 			{
-				j["name"] = enumType->m_pEnumInfo->m_pszName;
-				j["module"] = enumType->m_pEnumInfo->m_pszProjectName;
+				j["name"] = enumType->m_pEnumInfo->m_pName;
+				j["module"] = enumType->m_pEnumInfo->m_pProjectName;
 			}
 			else
 				j["name"] = type->m_sTypeName.String();

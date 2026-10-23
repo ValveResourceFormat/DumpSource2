@@ -278,13 +278,4 @@ inline const byte g_NetworkClassListSignature[] = "\x4C\x8B\x15\x2A\x2A\x2A\x2A\
 inline constexpr size_t g_NetworkClassListOffset = 0;
 #endif
 
-// A registration in that list, named here since the engine gives it no name.
-// TODO: Use the SDK's struct when it has one
-struct NetworkClassRegistration_t
-{
-	const char* m_pszClassName;
-	const char* m_pszNetworkName;
-	NetworkClassRegistration_t* m_pNext;
-};
-
 } // namespace GameData

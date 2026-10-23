@@ -24,6 +24,7 @@
 #define INETCHANNEL_H
 #include <bitvec.h>
 #include <const.h>
+#include <engine2/server_class.h>
 #include <networksystem/inetworkserializer.h>
 
 #include "appframework.h"
@@ -406,25 +407,25 @@ static bool AddNetworkClasses(CModule& module, Classes_t& classes)
 	std::set<std::string> names;
 	for (auto registration = *head; registration; registration = registration->m_pNext)
 	{
-		if (!Modules::IsInModule(module, registration) || !Modules::IsValidName(registration->m_pszClassName) ||
-			!Modules::IsValidName(registration->m_pszNetworkName) || !names.insert(registration->m_pszClassName).second)
+		if (!Modules::IsInModule(module, registration) || !Modules::IsValidName(registration->m_pDLLClassName) ||
+			!Modules::IsValidName(registration->m_pNetworkName) || !names.insert(registration->m_pDLLClassName).second)
 		{
-			spdlog::critical("Network class {} in {} does not match, NetworkClassRegistration_t in gamedata.h needs updating", names.size(), module.m_pszModule);
+			spdlog::critical("Network class {} in {} does not match, NetworkClassRegistration_t in the SDK needs updating", names.size(), module.m_pszModule);
 			return false;
 		}
 
 		// The client links its classes to the server's by network name, which so far is always the class name
-		if (strcmp(registration->m_pszClassName, registration->m_pszNetworkName))
+		if (strcmp(registration->m_pDLLClassName, registration->m_pNetworkName))
 		{
-			spdlog::critical("Network class {} in {} is networked as {}, which is not written", registration->m_pszClassName, module.m_pszModule,
-				registration->m_pszNetworkName);
+			spdlog::critical("Network class {} in {} is networked as {}, which is not written", registration->m_pDLLClassName, module.m_pszModule,
+				registration->m_pNetworkName);
 			return false;
 		}
 
-		auto networkClass = classes.find(registration->m_pszClassName);
+		auto networkClass = classes.find(registration->m_pDLLClassName);
 		if (networkClass == classes.end())
 		{
-			spdlog::critical("Network class {} in {} is not in its network database", registration->m_pszClassName, module.m_pszModule);
+			spdlog::critical("Network class {} in {} is not in its network database", registration->m_pDLLClassName, module.m_pszModule);
 			return false;
 		}
 

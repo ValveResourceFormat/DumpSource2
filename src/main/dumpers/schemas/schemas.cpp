@@ -45,7 +45,7 @@ static const char* ValidateMetadata(const SchemaMetadataEntryData_t* metadata, i
 
 	for (int i = 0; i < count; i++)
 	{
-		if (!Modules::IsValidName(metadata[i].m_pszName))
+		if (!Modules::IsValidName(metadata[i].m_pName))
 			return "metadata name";
 	}
 
@@ -56,34 +56,34 @@ static const char* ValidateClass(const SchemaClassInfoData_t* classInfo)
 {
 	if (!Modules::FindModuleContaining(classInfo))
 		return "class info pointer";
-	if (!Modules::IsValidName(classInfo->m_pszName) || !Modules::IsValidName(classInfo->m_pszProjectName))
+	if (!Modules::IsValidName(classInfo->m_pName) || !Modules::IsValidName(classInfo->m_pProjectName))
 		return "class name";
-	if (auto invalid = ValidateMetadata(classInfo->m_pStaticMetadata, classInfo->m_nStaticMetadataCount))
+	if (auto invalid = ValidateMetadata(classInfo->m_pMetadata, classInfo->m_nNumMetadata))
 		return invalid;
-	if (classInfo->m_nBaseClassCount > 0 && !Modules::FindModuleContaining(classInfo->m_pBaseClasses))
+	if (classInfo->m_nNumBaseClasses > 0 && !Modules::FindModuleContaining(classInfo->m_pBaseClasses))
 		return "base classes pointer";
-	if (classInfo->m_nFieldCount > 0 && !Modules::FindModuleContaining(classInfo->m_pFields))
+	if (classInfo->m_nNumFields > 0 && !Modules::FindModuleContaining(classInfo->m_pFields))
 		return "fields pointer";
 
-	for (uint16_t i = 0; i < classInfo->m_nBaseClassCount; i++)
+	for (uint16_t i = 0; i < classInfo->m_nNumBaseClasses; i++)
 	{
 		const auto baseClass = classInfo->m_pBaseClasses[i].m_pClass;
 
-		if (baseClass && (!Modules::FindModuleContaining(baseClass) || !Modules::IsValidName(baseClass->m_pszName) || !Modules::IsValidName(baseClass->m_pszProjectName)))
+		if (baseClass && (!Modules::FindModuleContaining(baseClass) || !Modules::IsValidName(baseClass->m_pName) || !Modules::IsValidName(baseClass->m_pProjectName)))
 			return "base class";
 	}
 
-	for (uint16_t i = 0; i < classInfo->m_nFieldCount; i++)
+	for (uint16_t i = 0; i < classInfo->m_nNumFields; i++)
 	{
 		const auto& field = classInfo->m_pFields[i];
 
-		if (!Modules::IsValidName(field.m_pszName))
+		if (!Modules::IsValidName(field.m_pName))
 			return "field name";
 		if (!field.m_pType)
 			return "field type";
-		if (field.m_nSingleInheritanceOffset < 0 || field.m_nSingleInheritanceOffset > classInfo->m_nSize)
+		if (field.m_nSingleInheritanceOffset < 0 || field.m_nSingleInheritanceOffset > classInfo->m_nSizeOf)
 			return "field offset";
-		if (auto invalid = ValidateMetadata(field.m_pStaticMetadata, field.m_nStaticMetadataCount))
+		if (auto invalid = ValidateMetadata(field.m_pMetadata, field.m_nNumMetadata))
 			return invalid;
 	}
 
@@ -94,20 +94,20 @@ const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
 {
 	if (!Modules::FindModuleContaining(enumInfo))
 		return "enum info pointer";
-	if (!Modules::IsValidName(enumInfo->m_pszName) || !Modules::IsValidName(enumInfo->m_pszProjectName))
+	if (!Modules::IsValidName(enumInfo->m_pName) || !Modules::IsValidName(enumInfo->m_pProjectName))
 		return "enum name";
-	if (auto invalid = ValidateMetadata(enumInfo->m_pStaticMetadata, enumInfo->m_nStaticMetadataCount))
+	if (auto invalid = ValidateMetadata(enumInfo->m_pMetadata, enumInfo->m_nNumMetadata))
 		return invalid;
-	if (enumInfo->m_nEnumeratorCount > 0 && !Modules::FindModuleContaining(enumInfo->m_pEnumerators))
+	if (enumInfo->m_nNumEnumerators > 0 && !Modules::FindModuleContaining(enumInfo->m_pEnumerators))
 		return "enumerators pointer";
 
-	for (uint16_t i = 0; i < enumInfo->m_nEnumeratorCount; i++)
+	for (uint16_t i = 0; i < enumInfo->m_nNumEnumerators; i++)
 	{
 		const auto& enumerator = enumInfo->m_pEnumerators[i];
 
-		if (!Modules::IsValidName(enumerator.m_pszName))
+		if (!Modules::IsValidName(enumerator.m_pName))
 			return "enumerator name";
-		if (auto invalid = ValidateMetadata(enumerator.m_pStaticMetadata, enumerator.m_nStaticMetadataCount))
+		if (auto invalid = ValidateMetadata(enumerator.m_pMetadata, enumerator.m_nNumMetadata))
 			return invalid;
 	}
 
@@ -146,15 +146,15 @@ static constexpr uint32 g_ClassConstructMask = SCHEMA_CF1_IS_ABSTRACT | SCHEMA_C
 
 // Same as the class tag, enums in the global type scope only have it when they ask for it
 static constexpr std::pair<uint16, const char*> g_EnumInfoTagFlags[] = {
-	{ SCHEMA_EF_GLOBAL_TYPE_SCOPE, "MGlobalTypeScope" },
+	{ SCHEMA_EF1_GLOBAL_TYPE_SCOPE, "MGlobalTypeScope" },
 };
 
-// Enum flags for schemas.json. Bits 4 and 5 have no known meaning: bit 4 is on most enums of bit flags, bit 5 on about a third
-// of the enums.
-// TODO: Use the SDK's name when it has one for bit 3, and write bits 4 and 5 when their names are known
+// Enum flags for schemas.json. Bit 5 is left out, the SDK's name for it is a guess and it's on about a third of the enums.
 static constexpr std::pair<uint16, const char*> g_EnumFlags[] = {
-	// Unsigned storage type: on every enum with values above the signed limit, and on others declared with an unsigned type
-	{ SCHEMA_EF_UNK003, "unsigned" },
+	// On every enum with values above the signed limit, and on others declared with an unsigned type
+	{ SCHEMA_EF1_UNSIGNED_STORAGE_TYPE, "unsigned" },
+	// On most enums of bit flags
+	{ SCHEMA_EF1_IS_FLAGS_ENUM, "flags" },
 };
 
 static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<IntermediateSchemaClass>& classes)
@@ -174,21 +174,21 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 		}
 
 		IntermediateSchemaClass schemaClass{
-			.name = std::string(classInfo->m_pszName),
-			.module = std::string(classInfo->m_pszProjectName),
-			.size = classInfo->m_nSize,
-			.alignment = classInfo->m_nAlignment,
+			.name = std::string(classInfo->m_pName),
+			.module = std::string(classInfo->m_pProjectName),
+			.size = classInfo->m_nSizeOf,
+			.alignment = classInfo->m_nAlignOf,
 		};
 
 		// Constructible classes have an alignment, so the flag is only written for the others
-		const bool hasAlignment = classInfo->m_nAlignment != 255;
-		if (hasAlignment && (classInfo->m_nFlags1 & g_ClassConstructMask) != SCHEMA_CF1_CONSTRUCT_ALLOWED)
+		const bool hasAlignment = classInfo->m_nAlignOf != 255;
+		if (hasAlignment && (classInfo->m_nClassFlags1 & g_ClassConstructMask) != SCHEMA_CF1_CONSTRUCT_ALLOWED)
 		{
-			spdlog::critical("Schema class '{}' has an alignment but is not constructible, the construct_allowed handling in schemas.cpp needs updating", classInfo->m_pszName);
+			spdlog::critical("Schema class '{}' has an alignment but is not constructible, the construct_allowed handling in schemas.cpp needs updating", classInfo->m_pName);
 			return false;
 		}
 
-		uint32 flags = classInfo->m_nFlags1;
+		uint32 flags = classInfo->m_nClassFlags1;
 		if (hasAlignment)
 			flags &= ~SCHEMA_CF1_CONSTRUCT_ALLOWED;
 
@@ -198,50 +198,50 @@ static bool DumpClasses(CSchemaSystemTypeScope* typeScope, std::vector<Intermedi
 				schemaClass.flags.push_back(name);
 		}
 
-		spdlog::trace("Dumping class: '{}'", classInfo->m_pszName);
+		spdlog::trace("Dumping class: '{}'", classInfo->m_pName);
 #ifdef GAME_DOTA
 		if (!classInfo->m_pszCPPName)
-			spdlog::warn("Class '{}' has no cppname", classInfo->m_pszName);
-		else if (strcmp(classInfo->m_pszName, classInfo->m_pszCPPName) != 0)
-			spdlog::warn("Class '{}' has different cppname '{}'", classInfo->m_pszName, classInfo->m_pszCPPName);
+			spdlog::warn("Class '{}' has no cppname", classInfo->m_pName);
+		else if (strcmp(classInfo->m_pName, classInfo->m_pszCPPName) != 0)
+			spdlog::warn("Class '{}' has different cppname '{}'", classInfo->m_pName, classInfo->m_pszCPPName);
 #endif
 
-		for (uint16_t k = 0; k < classInfo->m_nStaticMetadataCount; k++)
+		for (uint16_t k = 0; k < classInfo->m_nNumMetadata; k++)
 		{
-			const auto& metadataEntry = classInfo->m_pStaticMetadata[k];
-			schemaClass.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName, classInfo));
+			const auto& metadataEntry = classInfo->m_pMetadata[k];
+			schemaClass.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pName, classInfo));
 		}
 
 		for (const auto& [flag, name] : g_ClassInfoTagFlags)
 		{
-			if (classInfo->m_nFlags1 & flag)
+			if (classInfo->m_nClassFlags1 & flag)
 				schemaClass.metadata.push_back({ .name = name, .hasValue = false });
 		}
 
-		for (uint16_t baseIndex = 0; baseIndex < classInfo->m_nBaseClassCount; ++baseIndex)
+		for (uint16_t baseIndex = 0; baseIndex < classInfo->m_nNumBaseClasses; ++baseIndex)
 		{
 			const auto& base = classInfo->m_pBaseClasses[baseIndex];
 			if (!base.m_pClass)
 				continue;
 
-			schemaClass.parents.push_back({ base.m_pClass->m_pszName, base.m_pClass->m_pszProjectName, base.m_nOffset });
+			schemaClass.parents.push_back({ base.m_pClass->m_pName, base.m_pClass->m_pProjectName, base.m_nOffset });
 		}
 
-		for (uint16_t k = 0; k < classInfo->m_nFieldCount; k++)
+		for (uint16_t k = 0; k < classInfo->m_nNumFields; k++)
 		{
 			const auto& field = classInfo->m_pFields[k];
-			spdlog::trace("Dumping field: '{}' for class: '{}'", field.m_pszName, classInfo->m_pszName);
+			spdlog::trace("Dumping field: '{}' for class: '{}'", field.m_pName, classInfo->m_pName);
 
 			IntermediateSchemaClassField intermediateField{
-				.name = std::string(field.m_pszName),
+				.name = std::string(field.m_pName),
 				.offset = field.m_nSingleInheritanceOffset,
 				.type = field.m_pType,
 			};
 
-			for (uint16_t l = 0; l < field.m_nStaticMetadataCount; l++)
+			for (uint16_t l = 0; l < field.m_nNumMetadata; l++)
 			{
-				const auto& metadataEntry = field.m_pStaticMetadata[l];
-				intermediateField.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pszName, classInfo));
+				const auto& metadataEntry = field.m_pMetadata[l];
+				intermediateField.metadata.push_back(GetMetadata(metadataEntry, classInfo->m_pName, classInfo));
 			}
 
 			schemaClass.fields.push_back(std::move(intermediateField));
@@ -271,7 +271,7 @@ static bool DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<Intermediat
 
 		std::optional<std::string> alignment;
 
-		switch (enumInfo->m_nAlignment)
+		switch (enumInfo->m_nAlignOf)
 		{
 			case 1:
 				alignment = "uint8_t";
@@ -287,45 +287,45 @@ static bool DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<Intermediat
 				break;
 		}
 
-		spdlog::trace("Dumping enum: '{}'", enumInfo->m_pszName);
+		spdlog::trace("Dumping enum: '{}'", enumInfo->m_pName);
 
 		IntermediateSchemaEnum schemaEnum{
-			.name = std::string(enumInfo->m_pszName),
-			.module = std::string(enumInfo->m_pszProjectName),
+			.name = std::string(enumInfo->m_pName),
+			.module = std::string(enumInfo->m_pProjectName),
 			.stringAlignment = std::move(alignment),
 		};
 
 		for (const auto& [flag, name] : g_EnumFlags)
 		{
-			if (enumInfo->m_nFlags & flag)
+			if (enumInfo->m_nEnumFlags1 & flag)
 				schemaEnum.flags.push_back(name);
 		}
 
-		for (uint16_t k = 0; k < enumInfo->m_nStaticMetadataCount; k++)
+		for (uint16_t k = 0; k < enumInfo->m_nNumMetadata; k++)
 		{
-			const auto& metadataEntry = enumInfo->m_pStaticMetadata[k];
-			schemaEnum.metadata.push_back(GetMetadata(metadataEntry, enumInfo->m_pszName));
+			const auto& metadataEntry = enumInfo->m_pMetadata[k];
+			schemaEnum.metadata.push_back(GetMetadata(metadataEntry, enumInfo->m_pName));
 		}
 
 		for (const auto& [flag, name] : g_EnumInfoTagFlags)
 		{
-			if (enumInfo->m_nFlags & flag)
+			if (enumInfo->m_nEnumFlags1 & flag)
 				schemaEnum.metadata.push_back({ .name = name, .hasValue = false });
 		}
 
-		for (uint16_t k = 0; k < enumInfo->m_nEnumeratorCount; k++)
+		for (uint16_t k = 0; k < enumInfo->m_nNumEnumerators; k++)
 		{
 			const auto& field = enumInfo->m_pEnumerators[k];
-			spdlog::trace("Dumping enumerator: '{}' for enum: '{}'", field.m_pszName, enumInfo->m_pszName);
+			spdlog::trace("Dumping enumerator: '{}' for enum: '{}'", field.m_pName, enumInfo->m_pName);
 			IntermediateSchemaEnumMember member{
-				.name = std::string(field.m_pszName),
+				.name = std::string(field.m_pName),
 				.value = field.m_nValue,
 			};
 
-			for (uint16_t l = 0; l < field.m_nStaticMetadataCount; l++)
+			for (uint16_t l = 0; l < field.m_nNumMetadata; l++)
 			{
-				const auto& metadataEntry = field.m_pStaticMetadata[l];
-				member.metadata.push_back(GetMetadata(metadataEntry, enumInfo->m_pszName));
+				const auto& metadataEntry = field.m_pMetadata[l];
+				member.metadata.push_back(GetMetadata(metadataEntry, enumInfo->m_pName));
 			}
 
 			schemaEnum.members.push_back(std::move(member));

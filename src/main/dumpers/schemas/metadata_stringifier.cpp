@@ -175,10 +175,10 @@ static void AddHiddenClassKeys(const SchemaClassInfoData_t* classInfo, std::unor
 	if (!classInfo)
 		return;
 
-	if (auto it = GameData::g_HiddenClassDefaultKeys.find(classInfo->m_pszName); it != GameData::g_HiddenClassDefaultKeys.end())
+	if (auto it = GameData::g_HiddenClassDefaultKeys.find(classInfo->m_pName); it != GameData::g_HiddenClassDefaultKeys.end())
 		keys.insert(it->second.begin(), it->second.end());
 
-	for (uint16_t i = 0; i < classInfo->m_nBaseClassCount; i++)
+	for (uint16_t i = 0; i < classInfo->m_nNumBaseClasses; i++)
 		AddHiddenClassKeys(classInfo->m_pBaseClasses[i].m_pClass, keys);
 }
 
@@ -248,7 +248,7 @@ static bool HasMetadataValue(const SchemaMetadataEntryData_t& entry)
 	if (!entry.m_pData)
 		return false;
 
-	auto it = g_mapMetadataNameToValue.find(entry.m_pszName);
+	auto it = g_mapMetadataNameToValue.find(entry.m_pName);
 	return it == g_mapMetadataNameToValue.end() || it->second != MetadataValueType::FUNCTION;
 }
 
@@ -258,11 +258,11 @@ static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData
 	if (!entry.m_pData)
 		return {};
 
-	auto valueType = g_mapMetadataNameToValue.find(entry.m_pszName);
+	auto valueType = g_mapMetadataNameToValue.find(entry.m_pName);
 	if (valueType == g_mapMetadataNameToValue.end())
 	{
-		if (!g_unknownMetadataSamples.contains(entry.m_pszName))
-			g_unknownMetadataSamples[entry.m_pszName] = fmt::format("on {}: {}", metadataTargetName, DescribeUnknownMetadata(entry.m_pData));
+		if (!g_unknownMetadataSamples.contains(entry.m_pName))
+			g_unknownMetadataSamples[entry.m_pName] = fmt::format("on {}: {}", metadataTargetName, DescribeUnknownMetadata(entry.m_pData));
 
 		return {};
 	}
@@ -309,7 +309,7 @@ static std::optional<std::string> GetMetadataValue(const SchemaMetadataEntryData
 
 IntermediateMetadata GetMetadata(const SchemaMetadataEntryData_t& entry, const char* metadataTargetName, const SchemaClassInfoData_t* classInfo)
 {
-	IntermediateMetadata metadata{ .name = entry.m_pszName, .hasValue = HasMetadataValue(entry) };
+	IntermediateMetadata metadata{ .name = entry.m_pName, .hasValue = HasMetadataValue(entry) };
 	metadata.stringValue = GetMetadataValue(entry, metadataTargetName, classInfo, metadata.jsonValue);
 	return metadata;
 }
