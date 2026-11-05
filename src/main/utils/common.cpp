@@ -90,6 +90,18 @@ bool V_StringToBool(const char*, bool, bool*, char**, uint, IErrorListener*)
 	return false;
 }
 
+int8 V_StringToInt8(const char*, int8, bool*, char**, uint, IErrorListener*)
+{
+	Tier0NotLinked(__func__);
+	return 0;
+}
+
+uint8 V_StringToUint8(const char*, uint8, bool*, char**, uint, IErrorListener*)
+{
+	Tier0NotLinked(__func__);
+	return 0;
+}
+
 int16 V_StringToInt16(const char*, int16, bool*, char**, uint, IErrorListener*)
 {
 	Tier0NotLinked(__func__);
