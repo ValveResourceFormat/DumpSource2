@@ -141,7 +141,7 @@ static ConVarValue_t FormatValue(EConVarType type, const CVValue_t* value)
 	{
 		case EConVarType_Bool:
 			return { "bool", value->m_bValue ? "true" : "false", false };
-#ifdef GAME_DEADLOCK // TODO: Remove the guard once the CS2 and Dota SDKs have int8 and uint8
+#if defined(GAME_DEADLOCK) || defined(GAME_DOTA) // TODO: Remove the guard once the CS2 SDK has int8 and uint8
 		case EConVarType_Int8:
 			return { "int8", FormatNumber(value->m_i8Value), true };
 		case EConVarType_UInt8:

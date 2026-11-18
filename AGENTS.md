@@ -27,6 +27,7 @@ DumpSource2 loads a Source 2 game's modules without running the game and dumps w
 ## The SDK
 
 - Use the SDK's types and names, and don't edit its submodules. For a wrong or incomplete struct, read the member at an offset in `gamedata.h`, commented with the struct and member and validated like other reads. A local copy of a struct the SDK lacks uses the SDK's names, so it can be dropped once the SDK has it.
+- When a game's SDK branch is behind the game's engine, point its `build_game` at another game's SDK that matches the engine instead of syncing or patching the branch, and read what no SDK matches at an offset.
 - Mark every workaround for a missing or wrong SDK part with a `TODO:` saying what would make it unnecessary: offsets, local struct copies, raw flag values and features compiled out for a game (`#ifdef GAME_*`).
 - Give SDK fixes to its maintainers as a patch instead, against the latest upstream commit (update the submodule first, so the patch only has what's still missing), without explanatory comments and keeping each file's line endings. Check that it applies, builds on Windows and Linux, and leaves the output unchanged.
 - After a submodule update, go through the `TODO:`s: remove workarounds the SDK now covers and re-enable features for games whose SDK now has them. Then dump every game and diff against the previous build.
