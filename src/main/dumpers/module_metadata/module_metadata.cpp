@@ -106,6 +106,11 @@ static std::string QuoteNonFiniteFloats(std::string_view text)
 				result += *nonFinite;
 				result += '"';
 				i += nonFinite->size() - 1;
+
+				// Some tier0 builds append .0 to every float without a dot, these words included
+				if (text.substr(i + 1, 2) == ".0")
+					i += 2;
+
 				continue;
 			}
 		}
