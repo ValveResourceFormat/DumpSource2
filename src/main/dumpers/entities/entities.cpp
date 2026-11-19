@@ -128,16 +128,6 @@ static std::string FormatFlags(const std::vector<std::string>& flags)
 	return text;
 }
 
-// TODO: Read m_pNext directly once the SDK's CEntityClass has the member Dota added
-static CEntityClass* GetNextEntityClass(const CEntityClass* entityClass)
-{
-#ifdef GAME_DOTA
-	return *(CEntityClass**)((const byte*)entityClass + GameData::g_EntityClassNextOffset);
-#else
-	return entityClass->m_pNext;
-#endif
-}
-
 // Flags which only a few classes set
 static std::vector<std::string> GetClassFlags(const CEntityClass* entityClass)
 {
@@ -1130,7 +1120,7 @@ bool Dump()
 		auto& classes = entities[module.m_pszModule];
 		bool moduleFailed = false;
 
-		for (auto entityClass = head; entityClass; entityClass = GetNextEntityClass(entityClass))
+		for (auto entityClass = head; entityClass; entityClass = entityClass->m_pNext)
 		{
 			if (auto invalid = ValidateEntityClass(module, entityClass))
 			{

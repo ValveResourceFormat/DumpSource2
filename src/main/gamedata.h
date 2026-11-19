@@ -23,7 +23,6 @@
 
 #include <icvar.h>
 #include <interfaces/interfaces.h>
-#include <schemalib/schemaenuminfo_data.h>
 #include <tier0/utlstring.h>
 #include <set>
 #include <string>
@@ -139,19 +138,6 @@ inline constexpr const char* g_SaveKV3AsJSONSymbol = "_Z13SaveKV3AsJSONPK10KeyVa
 #endif
 
 //-----------------------------------------------------------------------------
-// Schemas
-//-----------------------------------------------------------------------------
-
-// SchemaEnumInfoData_t::m_pMetadata, after an array of enumerator indices sorted by name in Dota.
-// To update, find the enum size function called from the "CSchemaSystemTypeScope::InsertNewEnumBinding" function in schemasystem.
-// TODO: Remove once the SDK's SchemaEnumInfoData_t has the sorted index array
-#ifdef GAME_DOTA
-inline constexpr size_t g_SchemaEnumMetadataOffset = 0x30;
-#else
-inline constexpr size_t g_SchemaEnumMetadataOffset = offsetof(SchemaEnumInfoData_t, m_pMetadata);
-#endif
-
-//-----------------------------------------------------------------------------
 // Schema class defaults (MGetKV3ClassDefaults)
 //-----------------------------------------------------------------------------
 
@@ -256,13 +242,6 @@ inline constexpr const char* g_WorkshopWhitelistPath = "pak01_dir/scripts/worksh
 inline const byte g_EntityClassListSignature[] = "\x48\x8B\x35\x2A\x2A\x2A\x2A\x33\xED\x4C\x8B\xFA\x48\x85\xF6";
 #else
 inline const byte g_EntityClassListSignature[] = "\x48\x8B\x1D\x2A\x2A\x2A\x2A\x48\x89\x75\xB0\x48\x85\xDB";
-#endif
-
-// CEntityClass::m_pNext, after a member Dota has before m_requiredEHandle.
-// To update, find the next pointer load in the same list walk as g_EntityClassListSignature.
-// TODO: Remove once the SDK's CEntityClass has the member
-#ifdef GAME_DOTA
-inline constexpr size_t g_EntityClassNextOffset = 0x128;
 #endif
 
 // Modules that always link entities, not finding their list means the signature is outdated

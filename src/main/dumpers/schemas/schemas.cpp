@@ -18,7 +18,6 @@
  */
 
 #include "schemas.h"
-#include "gamedata.h"
 #include "interfaces.h"
 #include "modules.h"
 #include <algorithm>
@@ -35,12 +34,6 @@
 
 namespace Dumpers::Schemas
 {
-
-// TODO: Read m_pMetadata directly once the SDK's SchemaEnumInfoData_t has the sorted index array
-static const SchemaMetadataEntryData_t* GetEnumMetadata(const SchemaEnumInfoData_t* enumInfo)
-{
-	return *(const SchemaMetadataEntryData_t**)((const byte*)enumInfo + GameData::g_SchemaEnumMetadataOffset);
-}
 
 // Schemas are read through the SDK structs, which can be outdated while everything still loads.
 // Class and enum infos are static data in the module that declares them, so check the pointers before reading.
@@ -103,7 +96,7 @@ const char* ValidateEnum(const SchemaEnumInfoData_t* enumInfo)
 		return "enum info pointer";
 	if (!Modules::IsValidName(enumInfo->m_pName) || !Modules::IsValidName(enumInfo->m_pProjectName))
 		return "enum name";
-	if (auto invalid = ValidateMetadata(GetEnumMetadata(enumInfo), enumInfo->m_nNumMetadata))
+	if (auto invalid = ValidateMetadata(enumInfo->m_pMetadata,enumInfo->m_nNumMetadata))
 		return invalid;
 	if (enumInfo->m_nNumEnumerators > 0 && !Modules::FindModuleContaining(enumInfo->m_pEnumerators))
 		return "enumerators pointer";
@@ -310,7 +303,7 @@ static bool DumpEnums(CSchemaSystemTypeScope* typeScope, std::vector<Intermediat
 
 		for (uint16_t k = 0; k < enumInfo->m_nNumMetadata; k++)
 		{
-			const auto& metadataEntry = GetEnumMetadata(enumInfo)[k];
+			const auto& metadataEntry = enumInfo->m_pMetadata[k];
 			schemaEnum.metadata.push_back(GetMetadata(metadataEntry, enumInfo->m_pName));
 		}
 
