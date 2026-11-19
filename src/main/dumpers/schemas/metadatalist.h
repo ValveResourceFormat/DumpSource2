@@ -99,6 +99,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MPulseEditorHeaderHelper", MetadataValueType::STRING },
 	{ "MVDataOutlinerAssetNameExpr", MetadataValueType::STRING },
 	{ "MWorkshopEnumeratorColor", MetadataValueType::STRING },
+	{ "MPulseEditorSearchExpr", MetadataValueType::STRING },
 
 	// INLINE STRING
 	{ "MDiskDataForResourceType", MetadataValueType::INLINE_STRING },
@@ -120,6 +121,7 @@ inline std::map<std::string, MetadataValueType> g_mapMetadataNameToValue{
 	{ "MSaveBehavior", MetadataValueType::INTEGER },
 	{ "MPropertyFlattenStretchFactor", MetadataValueType::INTEGER },
 	{ "MPropertyResizable", MetadataValueType::INTEGER },
+	{ "MDebugSnapshotDataSortPriority", MetadataValueType::INTEGER },
 
 	// BOOL
 	{ "MVDataOutlinerDefaultExpanded", MetadataValueType::BOOL },
