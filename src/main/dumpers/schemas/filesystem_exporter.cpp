@@ -135,6 +135,111 @@ static const nlohmann::json* FindMetadataValue(const std::vector<IntermediateMet
 	return nullptr;
 }
 
+using ClassLookup = std::map<std::pair<std::string, std::string>, const IntermediateSchemaClass*>;
+
+// The keys of a value that differ from the defaults, in nested objects too; a key without a default is zero
+static nlohmann::json DiffDefaults(const nlohmann::json& value, const nlohmann::json& defaults)
+{
+	static const nlohmann::json emptyObject = nlohmann::json::object();
+	auto diff = nlohmann::json::object();
+
+	for (auto it = value.begin(); it != value.end(); ++it)
+	{
+		auto defaultIt = defaults.find(it.key());
+		const bool hasDefault = defaultIt != defaults.end();
+
+		if (it->is_object() && (!hasDefault || defaultIt->is_object()))
+		{
+			const auto nested = DiffDefaults(*it, hasDefault ? *defaultIt : emptyObject);
+			if (!nested.empty())
+				diff[it.key()] = nested;
+		}
+		else if (hasDefault && *it != *defaultIt)
+		{
+			diff[it.key()] = *it;
+		}
+		else if (!hasDefault && !IsZeroDefault(*it))
+		{
+			diff[it.key()] = *it;
+		}
+	}
+
+	return diff;
+}
+
+// The class defaults of a class type, which are empty for other types
+static const nlohmann::json& FindTypeDefaults(const ClassLookup& classes, const CSchemaType* type)
+{
+	static const nlohmann::json emptyObject = nlohmann::json::object();
+
+	if (type->m_eTypeCategory != SCHEMA_TYPE_DECLARED_CLASS)
+		return emptyObject;
+
+	const auto* classType = static_cast<const CSchemaType_DeclaredClass*>(type);
+	if (!classType->m_pClassInfo || !classType->m_pClassInfo->m_pName)
+		return emptyObject;
+
+	auto it = classes.find({ classType->m_pClassInfo->m_pProjectName, classType->m_pClassInfo->m_pName });
+	if (it == classes.end())
+		return emptyObject;
+
+	const auto* defaults = FindMetadataValue(it->second->metadata, "MGetKV3ClassDefaults");
+	if (!defaults || !defaults->is_object())
+		return emptyObject;
+
+	return *defaults;
+}
+
+// A field default reduced to what differs from its type's defaults, or nothing when it equals them or is zero
+static std::optional<nlohmann::json> ReduceDefault(const ClassLookup& classes, const CSchemaType* type, const nlohmann::json& value)
+{
+	bool isClassArray = false;
+	if (type->m_eTypeCategory == SCHEMA_TYPE_FIXED_ARRAY)
+	{
+		const auto* array = static_cast<const CSchemaType_FixedArray*>(type);
+		isClassArray = array->m_pElementType->m_eTypeCategory == SCHEMA_TYPE_DECLARED_CLASS;
+	}
+
+	if (isClassArray && value.is_array())
+	{
+		const auto* array = static_cast<const CSchemaType_FixedArray*>(type);
+		const auto& defaults = FindTypeDefaults(classes, array->m_pElementType);
+		auto elements = nlohmann::json::array();
+		bool differs = false;
+
+		for (const auto& element : value)
+		{
+			auto diff = element;
+			if (element.is_object())
+				diff = DiffDefaults(element, defaults);
+
+			if (!diff.empty())
+				differs = true;
+
+			elements.push_back(diff);
+		}
+
+		if (!differs)
+			return std::nullopt;
+
+		return elements;
+	}
+
+	if (value.is_object())
+	{
+		auto diff = DiffDefaults(value, FindTypeDefaults(classes, type));
+		if (diff.empty())
+			return std::nullopt;
+
+		return diff;
+	}
+
+	if (IsZeroDefault(value))
+		return std::nullopt;
+
+	return value;
+}
+
 // Defaults are keyed by the KV3 transfer name when a field has one
 static const nlohmann::json* FindFieldDefault(const nlohmann::json& defaults, const IntermediateSchemaClassField& field)
 {
@@ -195,6 +300,10 @@ static std::filesystem::path GetOutputPath(const std::filesystem::path& schemaPa
 
 static bool DumpClasses(const std::vector<IntermediateSchemaClass>& classes, const std::filesystem::path& schemaPath, std::map<std::string, std::unordered_set<std::string>>& foundFiles)
 {
+	ClassLookup lookup;
+	for (const auto& intermediateClass : classes)
+		lookup[{ intermediateClass.module, intermediateClass.name }] = &intermediateClass;
+
 	for (const auto& intermediateClass : classes)
 	{
 		const auto path = GetOutputPath(schemaPath, intermediateClass.module, intermediateClass.name, foundFiles);
@@ -241,10 +350,11 @@ static bool DumpClasses(const std::vector<IntermediateSchemaClass>& classes, con
 			output << "\t" << field.type->m_sTypeName.String() << " " << field.name << ";";
 
 			auto value = defaults ? FindFieldDefault(*defaults, field) : nullptr;
-			if (value && !IsZeroDefault(*value))
+			auto reduced = value ? ReduceDefault(lookup, field.type, *value) : std::nullopt;
+			if (reduced)
 			{
 				std::string text;
-				WriteDefault(*value, text);
+				WriteDefault(*reduced, text);
 				output << " // = " << text;
 			}
 
