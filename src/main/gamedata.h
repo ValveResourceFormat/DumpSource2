@@ -196,12 +196,12 @@ inline const std::unordered_map<std::string, std::unordered_set<std::string>> g_
 	{ "CStateUpdateData", { "m_stateID" } },
 	{ "CTestPulseIO::EntityHandleIntArgs_t", { "valueB" } },
 	{ "FourCovMatrices3", { "m_flXY" } },
-	{ "HitReactFixedSettings_t", { "m_flWhipSpringStrength" } },
-	{ "RTProxyBLAS_t", { "m_vMaxBounds" } },
+	{ "HitReactFixedSettings_t", { "m_flWhipSpringStrength", "m_flMaxAngleRadians" } },
+	{ "RTProxyBLAS_t", { "m_vMaxBounds", "m_vVertexOriginLs" } },
 	{ "VMixPointerFixupEntry_t", { "m_nIndex" } },
 	{ "dynpitchvol_base_t", { "pitchfrac", "vol" } },
 	{ "dynpitchvol_t", { "pitchfrac", "vol" } },
-	{ "vphysics_save_ragdoll_control_t", { "m_vLinearVelocityAccumulator" } },
+	{ "vphysics_save_ragdoll_control_t", { "m_vLinearVelocityAccumulator", "m_vAngularVelocityAccumulator" } },
 };
 
 //-----------------------------------------------------------------------------
