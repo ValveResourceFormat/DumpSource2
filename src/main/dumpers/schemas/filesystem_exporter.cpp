@@ -77,7 +77,8 @@ static void WriteDefault(const nlohmann::json& value, std::string& out)
 {
 	if (value.is_number_float())
 	{
-		out += FormatFloat(value.get<double>());
+		// KV3 defaults hold float32 values
+		out += FormatFloat(static_cast<float>(value.get<double>()));
 	}
 	else if (value.is_string() && ModuleMetadata::IsNonFiniteFloat(value.get_ref<const std::string&>()))
 	{
