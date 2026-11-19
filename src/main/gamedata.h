@@ -274,7 +274,7 @@ inline constexpr size_t g_NetworkDatabaseNameOffset = 10;
 inline const byte g_NetworkClassListSignature[] = "\xE8\x2A\x2A\x2A\x2A\x4C\x8B\x3D\x2A\x2A\x2A\x2A\x32\xC0\x33\xFF";
 inline constexpr size_t g_NetworkClassListOffset = 5;
 #else
-inline const byte g_NetworkClassListSignature[] = "\x4C\x8B\x15\x2A\x2A\x2A\x2A\x4D\x85\xD2\x0F\x84\x2A\x2A\x2A\x2A\x48\x8D\x45\x80";
+inline const byte g_NetworkClassListSignature[] = "\x4C\x8B\x2A\x2A\x2A\x2A\x2A\x4D\x85\x2A\x0F\x84\x2A\x2A\x2A\x2A\x48\x8D\x45\x80";
 inline constexpr size_t g_NetworkClassListOffset = 0;
 #endif
 
